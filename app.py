@@ -5,6 +5,10 @@ models = ["qwen2.5-0.5b", "qwen2.5-coder-0.5b", "qwen2.5-1.5b", "qwen2.5-coder-1
 
 def main():
     with gr.Blocks() as full_interface:
+        chat_input = gr.Textbox(
+            interactive=False,
+        )
+
         model_select = gr.Dropdown(
             label="Select Model",
             choices=models,
@@ -14,12 +18,16 @@ def main():
         manager = FoundryManager()
 
         def load_model(model_name):
-            nonlocal manager
             manager.load_model(model_name)
+            return gr.Textbox(
+                interactive=True,
+                submit_btn=True,
+            )
 
-        model_select.change(load_model, inputs=model_select, outputs=None)
+        model_select.change(load_model, inputs=model_select, outputs=chat_input)
 
         gr.ChatInterface(
+            textbox=chat_input,
             save_history=True,
             fn=manager.get_model_response,
         )
