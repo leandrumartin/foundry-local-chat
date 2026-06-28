@@ -5,13 +5,6 @@ class FoundryManager:
         self._model = None
         self._client = None
         self._manager = self._initialize_manager()
-        self._history = [
-            {
-                "role": "system",
-                "content": "You are a helpful, friendly assistant. Keep your responses "
-                           "concise and conversational. If you don't know something, say so.",
-            }
-        ]
 
     def _initialize_manager(self):
         # Initialize the Foundry Local SDK

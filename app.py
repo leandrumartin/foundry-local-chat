@@ -1,20 +1,9 @@
 import gradio as gr
-import random
-import time
 from foundry import FoundryManager
-import os
 
-models = ["qwen2.5-0.5b", "qwen2.5-coder-0.5b", "qwen2.5-1.5b", "qwen2.5-7b", "qwen2.5-7b-instruct-qnn-npu:3"]
-messages = []
-
-def slow_echo(message, history):
-    for i in range(len(message)):
-        time.sleep(0.3)
-        yield "You typed: " + message[: i+1]
+models = ["qwen2.5-0.5b", "qwen2.5-coder-0.5b", "qwen2.5-1.5b", "qwen2.5-coder-1.5b", "qwen2.5-7b", "qwen2.5-coder-7b"]
 
 def main():
-    print(os.getcwd())
-
     with gr.Blocks() as full_interface:
         model_select = gr.Dropdown(
             label="Select Model",
@@ -24,16 +13,15 @@ def main():
 
         manager = FoundryManager()
 
-        def set_manager(model_name):
+        def load_model(model_name):
             nonlocal manager
             manager.load_model(model_name)
 
-        model_select.change(fn=lambda model_name: set_manager(model_name), inputs=model_select, outputs=None)
+        model_select.change(load_model, inputs=model_select, outputs=None)
 
         gr.ChatInterface(
             save_history=True,
             fn=manager.get_model_response,
-            # flagging_dir="."
         )
 
     full_interface.launch()
