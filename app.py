@@ -3,6 +3,7 @@ from foundry import FoundryManager
 
 models = ["qwen2.5-0.5b", "qwen2.5-coder-0.5b", "qwen2.5-1.5b", "qwen2.5-coder-1.5b", "qwen2.5-7b", "qwen2.5-coder-7b"]
 default_model = models[0]
+retain_loaded_models = False
 
 def main():
     with gr.Blocks() as full_interface:
@@ -15,8 +16,8 @@ def main():
 
         manager = FoundryManager()
 
-        def load_model(model_name):
-            manager.load_model(model_name)
+        def load_model(model_name, retain):
+            manager.load_model(model_name, retain)
 
             loaded_models_list = gr.Textbox(
                 label="Loaded Models",
@@ -33,8 +34,14 @@ def main():
 
             return loaded_models_list, input_textbox
 
-        loaded_models_list, chat_input = load_model(default_model)
-        model_select.change(load_model, inputs=model_select, outputs=[loaded_models_list, chat_input])
+        retain_checkbox = gr.Checkbox(
+            label="Retain Loaded Models",
+            value=retain_loaded_models,
+            interactive=True,
+        )
+
+        loaded_models_list, chat_input = load_model(default_model, retain_loaded_models)
+        model_select.change(load_model, inputs=[model_select, retain_checkbox], outputs=[loaded_models_list, chat_input])
 
         gr.ChatInterface(
             textbox=chat_input,

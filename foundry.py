@@ -46,8 +46,8 @@ class FoundryManager:
         return model
 
     def load_model(self, model_name, retain=False):
-        if self._model is not None and not retain:
-            self.unload_model(self._current_model_name)
+        if not retain:
+            self.unload_all_models()
 
         self._current_model_name = model_name
         if model_name not in self._loaded_models:
@@ -76,6 +76,11 @@ class FoundryManager:
             self._manager.catalog.get_model(model_name).unload()
             self._loaded_models.remove(model_name)
             print(f"Model '{model_name}' unloaded.")
+
+    def unload_all_models(self):
+        for model_name in self._loaded_models:
+            self.unload_model(model_name)
+        self._loaded_models.clear()
 
     def get_loaded_models(self):
         return self._loaded_models
