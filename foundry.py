@@ -41,13 +41,13 @@ class FoundryManager:
         )
         print()
         model.load()
-        print("Model loaded and ready.")
+        print(f"Model '{model_name}' loaded and ready.")
 
         return model
 
     def load_model(self, model_name, retain=False):
         if not retain:
-            self.unload_all_models()
+            self.unload_all_models(exceptions=[model_name])
 
         self._current_model_name = model_name
         if model_name not in self._loaded_models:
@@ -78,8 +78,10 @@ class FoundryManager:
             self._loaded_models.remove(model_name)
             print(f"Model '{model_name}' unloaded.")
 
-    def unload_all_models(self):
+    def unload_all_models(self, exceptions=None):
         for model_name in self._loaded_models:
+            if exceptions and model_name in exceptions:
+                continue
             self.unload_model(model_name)
         self._loaded_models.clear()
 
