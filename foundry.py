@@ -2,9 +2,11 @@ from foundry_local_sdk import Configuration, FoundryLocalManager
 
 class FoundryManager:
     def __init__(self):
+        self._current_model_name = None
         self._model = None
         self._client = None
         self._manager = self._initialize_manager()
+        self._loaded_models = []
 
     def _initialize_manager(self):
         # Initialize the Foundry Local SDK
@@ -43,11 +45,13 @@ class FoundryManager:
 
         return model
 
-    def load_model(self, model_name):
-        if self._model is not None:
-            self._model.unload()
-            print("Model unloaded.")
+    def load_model(self, model_name, retain=False):
+        if self._model is not None and not retain:
+            self.unload_model(self._current_model_name)
 
+        self._current_model_name = model_name
+        if model_name not in self._loaded_models:
+            self._loaded_models.append(model_name)
         self._model = self.get_loaded_model(model_name)
         self._client = self._model.get_chat_client()
 
@@ -66,3 +70,12 @@ class FoundryManager:
                 full_response += content
             yield full_response
         print("\n")
+
+    def unload_model(self, model_name):
+        if model_name in self._loaded_models:
+            self._manager.catalog.get_model(model_name).unload()
+            self._loaded_models.remove(model_name)
+            print(f"Model '{model_name}' unloaded.")
+
+    def get_loaded_models(self):
+        return self._loaded_models

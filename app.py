@@ -17,15 +17,24 @@ def main():
 
         def load_model(model_name):
             manager.load_model(model_name)
-            return gr.Textbox(
+
+            loaded_models_list = gr.Textbox(
+                label="Loaded Models",
+                value=", ".join(manager.get_loaded_models()),
+                interactive=False,
+            )
+
+            input_textbox = gr.Textbox(
                 interactive=True,
                 submit_btn=True,
                 stop_btn=True,
                 placeholder="Ask anything...",
             )
 
-        chat_input = load_model(default_model)
-        model_select.change(load_model, inputs=model_select, outputs=chat_input)
+            return loaded_models_list, input_textbox
+
+        loaded_models_list, chat_input = load_model(default_model)
+        model_select.change(load_model, inputs=model_select, outputs=[loaded_models_list, chat_input])
 
         gr.ChatInterface(
             textbox=chat_input,
