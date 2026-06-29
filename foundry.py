@@ -57,6 +57,7 @@ class FoundryManager:
 
     def get_model_response(self, user_input, history):
         history.append({"role": "user", "content": user_input})
+        print("User: ", user_input)
 
         # Stream the response token by token
         print("Assistant: ", end="", flush=True)
