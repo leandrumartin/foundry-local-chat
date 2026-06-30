@@ -10,7 +10,7 @@ class FoundryManager:
 
     def _initialize_manager(self):
         # Initialize the Foundry Local SDK
-        config = Configuration(app_name="foundry_local_samples")
+        config = Configuration(app_name="foundry_local_chat")
         FoundryLocalManager.initialize(config)
         manager = FoundryLocalManager.instance
 
