@@ -1,11 +1,14 @@
 import gradio as gr
 from foundry import FoundryManager
 
-models = [
-    "qwen2.5-0.5b", "qwen2.5-coder-1.5b", "qwen2.5-coder-7b", # chat, tools. All run on NPU
-    "phi-3.5-mini", # chat. All run on NPU
-    "qwen3.5-2b", "qwen3.5-4b", # vision-language-chat, tools, reasoning. All run on GPU
-]
+try:
+    with open("models.txt", "r") as f:
+        models = [line.strip() for line in f if line.strip()]
+except FileNotFoundError:
+    print("models.txt not found. Please create the file and add model names, one per line.")
+    print("Defaulting to smallest model: 'qwen2.5-0.5b.'")
+    models = ["qwen2.5-0.5b"]
+
 default_model = models[0]
 retain_loaded_models = False
 
@@ -51,22 +54,6 @@ def main():
             choices=models,
             interactive=True,
             value=default_model,
-        )
-
-        gr.Markdown(
-            """
-            # Model Cheat Sheet
-
-            * Chat, tools (NPU):
-                * qwen2.5-0.5b
-                * qwen2.5-coder-1.5b
-                * qwen2.5-coder-7b
-            * Chat (NPU)
-                * phi-3.5-mini (4b parameters)
-            * Vision, chat, tools, reasoning (GPU)    
-                * qwen3.5-2b
-                * qwen3.5-4b
-            """,
         )
 
         retain_checkbox = gr.Checkbox(
