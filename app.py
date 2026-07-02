@@ -9,6 +9,26 @@ models = [
 default_model = models[0]
 retain_loaded_models = False
 
+manager = FoundryManager()
+
+def load_model(model_name, retain):
+    manager.load_model(model_name, retain)
+
+    loaded_models_list = gr.Textbox(
+        label="Loaded Models",
+        value=", ".join(manager.loaded_model_names),
+        interactive=False,
+    )
+
+    input_textbox = gr.MultimodalTextbox(
+        interactive=True,
+        submit_btn=True,
+        stop_btn=True,
+        placeholder="Ask anything...",
+    )
+
+    return loaded_models_list, input_textbox
+
 def main():
     with gr.Blocks() as full_interface:
         model_select = gr.Dropdown(
@@ -18,26 +38,6 @@ def main():
             value=default_model,
         )
 
-        manager = FoundryManager()
-
-        def load_model(model_name, retain):
-            manager.load_model(model_name, retain)
-
-            loaded_models_list = gr.Textbox(
-                label="Loaded Models",
-                value=", ".join(manager.loaded_model_names),
-                interactive=False,
-            )
-
-            input_textbox = gr.MultimodalTextbox(
-                interactive=True,
-                submit_btn=True,
-                stop_btn=True,
-                placeholder="Ask anything...",
-            )
-
-            return loaded_models_list, input_textbox
-        
         gr.Markdown(
             """
             # Model Cheat Sheet
@@ -65,7 +65,6 @@ def main():
 
         chatbot = gr.Chatbot(
             reasoning_tags=[("<think>", "</think>")],
-            autoscroll=False,
         )
 
         gr.ChatInterface(
@@ -73,7 +72,6 @@ def main():
             textbox=chat_input,
             save_history=True,
             fn=manager.get_model_response,
-            autoscroll=False,
         )
 
     full_interface.launch()
