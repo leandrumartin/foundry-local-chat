@@ -74,7 +74,7 @@ class FoundryManager:
         self._model = self.get_loaded_model(model_name)
         self._client = self._model.get_chat_client()
 
-    def get_model_response(self, history: list[dict[str, str]]) -> Generator[str]:
+    def get_model_response(self, history: list[dict]) -> Generator[str]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -83,6 +83,8 @@ class FoundryManager:
 
         if self._client is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
+        
+        history = self._cleaned_history(history)
 
         # Stream the response token by token
         full_response = ""
@@ -112,3 +114,22 @@ class FoundryManager:
                 continue
             self.unload_model(model_name)
         self.loaded_model_names.clear()
+
+    def _cleaned_history(self, history: list[dict]) -> list[dict[str, str]]:
+        """Clean the conversation history by replacing the 'content' fields containing dictionaries with their 'text'
+        values. This ensures that the history is in the correct format for the model to process."""
+
+        cleaned_history = []
+        for entry in history:
+            if isinstance(entry.get("content"), str):
+                cleaned_entry = entry
+            else:
+                # Other possible format is list[dict], i.e. [{"type": "text", "text": "some text"}]
+                text_content = entry["content"][0].get("text", "")
+                cleaned_entry = {
+                    "role": entry.get("role", ""),
+                    "content": text_content
+                }
+            cleaned_history.append(cleaned_entry)
+
+        return cleaned_history

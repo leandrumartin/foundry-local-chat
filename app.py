@@ -30,8 +30,6 @@ def load_model(model_name, retain):
     return loaded_models_list, input_textbox
 
 def get_model_response(user_input: dict[str, list] | str, history):
-    print(history)
-
     if isinstance(user_input, str):
         transformed_input = user_input
     else:
