@@ -74,7 +74,7 @@ class FoundryManager:
         self._model = self.get_loaded_model(model_name)
         self._client = self._model.get_chat_client()
 
-    def get_model_response(self, user_input: str, history: list[dict[str, str]]) -> Generator[str]:
+    def get_model_response(self, history: list[dict[str, str]]) -> Generator[str]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -84,21 +84,15 @@ class FoundryManager:
         if self._client is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
 
-        history.append({"role": "user", "content": user_input})
-        print("User: ", user_input)
-
         # Stream the response token by token
-        print("Assistant: ", end="", flush=True)
         full_response = ""
         for chunk in self._client.complete_streaming_chat(history):
             if not chunk.choices:
                 continue
             content = chunk.choices[0].delta.content
             if content:
-                print(content, end="", flush=True)
                 full_response += content
             yield full_response
-        print("\n")
 
     def unload_model(self, model_name: str) -> None:
         """Unload a model from memory. If the model is not loaded, does nothing."""

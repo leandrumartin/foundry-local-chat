@@ -29,6 +29,23 @@ def load_model(model_name, retain):
 
     return loaded_models_list, input_textbox
 
+def get_model_response(user_input: dict[str, list] | str, history):
+    print(history)
+
+    if isinstance(user_input, str):
+        transformed_input = user_input
+    else:
+        transformed_input = user_input.get("text", "")
+
+    transformed_input = {
+        "role": "user",
+        "content": transformed_input
+    }
+
+    history.append(transformed_input)
+
+    yield from manager.get_model_response(history)
+
 def main():
     with gr.Blocks() as full_interface:
         model_select = gr.Dropdown(
@@ -71,7 +88,7 @@ def main():
             chatbot=chatbot,
             textbox=chat_input,
             save_history=True,
-            fn=manager.get_model_response,
+            fn=get_model_response,
         )
 
     full_interface.launch()
