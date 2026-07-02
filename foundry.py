@@ -1,18 +1,22 @@
+from collections.abc import Generator
+
 from foundry_local_sdk import Configuration, FoundryLocalManager
+from foundry_local_sdk.imodel import IModel
+from foundry_local_sdk.openai import ChatClient
 
 class FoundryManager:
     def __init__(self):
-        self._current_model_name = None
-        self._model = None
-        self._client = None
-        self._manager = self._initialize_manager()
-        self._loaded_models = []
+        self._current_model_name: str|None = None
+        self._model: IModel|None = None
+        self._client: ChatClient|None = None
+        self._manager: FoundryLocalManager = self._get_initialized_manager()
+        self._loaded_models: list[str] = []
 
-    def _initialize_manager(self):
+    def _get_initialized_manager(self) -> FoundryLocalManager:
         # Initialize the Foundry Local SDK
-        config = Configuration(app_name="foundry_local_chat")
+        config: Configuration = Configuration(app_name="foundry_local_chat")
         FoundryLocalManager.initialize(config)
-        manager = FoundryLocalManager.instance
+        manager: FoundryLocalManager = FoundryLocalManager.instance
 
         # Download and register all execution providers.
         current_ep = ""
@@ -31,9 +35,13 @@ class FoundryManager:
 
         return manager
 
-    def get_loaded_model(self, model_name):
+    def get_loaded_model(self, model_name: str) -> (IModel):
         # Select and load a model from the catalog
-        model = self._manager.catalog.get_model(model_name)
+        model: IModel|None = self._manager.catalog.get_model(model_name)
+
+        if model is None:
+            raise ValueError(f"Model '{model_name}' not found in the catalog.")
+
         model.download(
             lambda progress: print(
                 f"\rDownloading model: {progress:.2f}%", end="", flush=True
@@ -45,7 +53,7 @@ class FoundryManager:
 
         return model
 
-    def load_model(self, model_name, retain=False):
+    def load_model(self, model_name: str, retain: bool = False) -> None:
         if not retain:
             self.unload_all_models(exceptions=[model_name])
 
@@ -55,7 +63,10 @@ class FoundryManager:
         self._model = self.get_loaded_model(model_name)
         self._client = self._model.get_chat_client()
 
-    def get_model_response(self, user_input, history):
+    def get_model_response(self, user_input: str, history: list[dict]) -> Generator[str]:
+        if self._client is None:
+            raise ValueError("No model is currently loaded. Please load a model first.")
+
         history.append({"role": "user", "content": user_input})
         print("User: ", user_input)
 
@@ -72,18 +83,20 @@ class FoundryManager:
             yield full_response
         print("\n")
 
-    def unload_model(self, model_name):
+    def unload_model(self, model_name: str) -> None:
         if model_name in self._loaded_models:
-            self._manager.catalog.get_model(model_name).unload()
+            model = self._manager.catalog.get_model(model_name)
+            if model is not None:
+                model.unload()
             self._loaded_models.remove(model_name)
             print(f"Model '{model_name}' unloaded.")
 
-    def unload_all_models(self, exceptions=None):
+    def unload_all_models(self, exceptions: list[str] = []) -> None:
         for model_name in self._loaded_models:
             if exceptions and model_name in exceptions:
                 continue
             self.unload_model(model_name)
         self._loaded_models.clear()
 
-    def get_loaded_models(self):
+    def get_loaded_models(self) -> list[str]:
         return self._loaded_models
