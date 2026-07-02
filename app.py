@@ -25,7 +25,7 @@ def main():
 
             loaded_models_list = gr.Textbox(
                 label="Loaded Models",
-                value=", ".join(manager.get_loaded_models()),
+                value=", ".join(manager.loaded_model_names),
                 interactive=False,
             )
 
