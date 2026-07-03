@@ -33,18 +33,14 @@ def load_model(model_name, retain):
     return loaded_models_list, input_textbox
 
 def get_model_response(user_input: dict[str, list] | str, history):
+    """Get a response from the currently loaded model based on user input and conversation history.
+    In the case of multimodal input, only the text portion is used for generating a response."""
     if isinstance(user_input, str):
         transformed_input = user_input
     else:
         transformed_input = user_input.get("text", "")
 
-    transformed_input = {
-        "role": "user",
-        "content": transformed_input
-    }
-
-    history.append(transformed_input)
-
+    history.append({"role": "user", "content": transformed_input})
     yield from manager.get_model_response(history)
 
 def main():
