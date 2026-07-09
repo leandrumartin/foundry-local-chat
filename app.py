@@ -1,4 +1,5 @@
 import gradio as gr
+from chat_history import ChatHistory
 from foundry import FoundryManager
 
 try:
@@ -13,6 +14,7 @@ default_model = models[0]
 retain_loaded_models = False
 
 manager = FoundryManager()
+history_manager = ChatHistory()
 
 def load_model(model_name, retain):
     manager.load_model(model_name, retain)
@@ -65,12 +67,51 @@ def main():
             reasoning_tags=[("<think>", "</think>")],
         )
 
-        gr.ChatInterface(
-            chatbot=chatbot,
-            textbox=chat_input,
-            save_history=True,
-            fn=get_model_response,
-        )
+        with gr.Row():
+            with gr.Column(scale=1, min_width=100):
+                new_chat_button = gr.Button(
+                    "New chat",
+                    variant="primary",
+                    size="md",
+                    # icon=utils.get_icon_path("plus.svg"),
+                    # scale=0,
+                )
+                chat_history_dataset = gr.Dataset(
+                    components=[gr.Textbox(visible=False)],
+                    show_label=False,
+                    layout="table",
+                    type="index",
+                )
+            with gr.Column(scale=6):
+                gr.ChatInterface(
+                    chatbot=chatbot,
+                    textbox=chat_input,
+                    # save_history=True,
+                    fn=get_model_response,
+                )
+
+            new_chat_button.click(
+                history_manager.load_new_conversation,
+                inputs = None,
+                outputs = [chatbot, chat_history_dataset],
+                queue=False,
+            )
+
+            # gr.on(
+            #     triggers=[saved_conversations.change],
+            #     fn=load_chat_history,
+            #     inputs=[saved_conversations],
+            #     outputs=[chat_history_dataset],
+            #     queue=False,
+            # )
+
+            chat_history_dataset.click(
+                history_manager.load_previous_conversation,
+                [chat_history_dataset],
+                [chatbot],
+                queue=False,
+                show_progress="hidden",
+            )
 
     full_interface.launch()
 
