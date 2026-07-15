@@ -25,14 +25,7 @@ def load_model(model_name, retain):
         interactive=False,
     )
 
-    input_textbox = gr.MultimodalTextbox(
-        interactive=True,
-        submit_btn=True,
-        stop_btn=True,
-        placeholder="Ask anything...",
-    )
-
-    return loaded_models_list, input_textbox
+    return loaded_models_list
 
 def get_model_response(user_input: dict[str, list] | str, history):
     """Get a response from the currently loaded model based on user input and conversation history.
@@ -65,8 +58,7 @@ def main():
             interactive=True,
         )
 
-        loaded_models_list, chat_input = load_model(default_model, retain_loaded_models)
-        model_select.change(load_model, inputs=[model_select, retain_checkbox], outputs=[loaded_models_list, chat_input])
+        loaded_models_list = load_model(default_model, retain_loaded_models)
 
         with gr.Row():
             with gr.Column(scale=1, min_width=100):
@@ -88,11 +80,33 @@ def main():
                     reasoning_tags=[("<think>", "</think>")],
                 )
 
+                chat_input = gr.MultimodalTextbox(
+                    interactive=True,
+                    submit_btn=True,
+                    stop_btn=True,
+                    placeholder="Ask anything...",
+                )
+
+            model_select.change(
+                load_model,
+                inputs=[model_select, retain_checkbox],
+                outputs=[loaded_models_list, chat_input]
+            )
+            
+            model_select.change(lambda: "", inputs=None, outputs=[chat_input], queue=False)
+
             chat_input.submit(
                 get_model_response,
                 inputs=[chat_input, chatbot],
                 outputs=[chatbot],
                 queue=True,
+            )
+
+            chat_input.submit(
+                lambda: "",
+                inputs=None,
+                outputs=[chat_input],
+                queue=False,
             )
 
             new_chat_button.click(
