@@ -25,7 +25,10 @@ class ChatHistory:
     def _get_conversation_title(self, index):
         conversation = self._get_conversation(index)
         if conversation:
-            return f"{conversation[0]['content'][:40]}..."
+            title = conversation[0]['content'][0]['text'][:40]  # Get the first 40 characters of the first message
+            if len(conversation[0]['content'][0]['text']) > 40:
+                title += "..."
+            return title
         else:
             return f"New conversation"
         

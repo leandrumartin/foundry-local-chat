@@ -16,6 +16,8 @@ retain_loaded_models = False
 manager = FoundryManager()
 history_manager = ChatHistory()
 
+transformed_user_input = ""
+
 def load_model(model_name, retain):
     manager.load_model(model_name, retain)
 
@@ -27,20 +29,27 @@ def load_model(model_name, retain):
 
     return loaded_models_list
 
-def get_model_response(user_input: dict[str, list] | str, history):
-    """Get a response from the currently loaded model based on user input and conversation history.
-    In the case of multimodal input, only the text portion is used for generating a response."""
-    if isinstance(user_input, str):
-        transformed_input = user_input
-    else:
-        transformed_input = user_input.get("text", "")
-
-    history.append({"role": "user", "content": transformed_input})
+def get_model_response(history):
+    """Get a response from the currently loaded model based on transformed user input and conversation history.
+    """
+    history.append({"role": "user", "content": transformed_user_input})
     history.append({"role": "assistant", "content": ""})
 
     for chunk in manager.get_model_response(history):
         history[-1]["content"] += chunk
         yield history
+
+def store_user_input_and_clear(user_input: dict[str, list] | str):
+    """Store the user input for later use. In the case of multimodal input, only the text portion is stored.
+    Returns an empty string to clear the input field in the UI."""
+    if isinstance(user_input, str):
+        transformed_input = user_input
+    else:
+        transformed_input = user_input.get("text", "")
+
+    global transformed_user_input
+    transformed_user_input = transformed_input
+    return ""
 
 def main():
     with gr.Blocks() as full_interface:
@@ -95,15 +104,15 @@ def main():
             model_select.change(lambda: "", inputs=None, outputs=[chat_input], queue=False)
 
             chat_input.submit(
-                get_model_response,
-                inputs=[chat_input, chatbot],
-                outputs=[chatbot],
-                queue=True,
-            ).then(
-                lambda: "",
-                inputs=None,
+                store_user_input_and_clear,
+                inputs=[chat_input],
                 outputs=[chat_input],
                 queue=False,
+            ).then(
+                get_model_response,
+                inputs=[chatbot],
+                outputs=[chatbot],
+                queue=True,
             ).then(
                 history_manager.update_current_conversation,
                 inputs=[chatbot],
