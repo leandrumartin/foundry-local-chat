@@ -43,7 +43,12 @@ def get_model_response(user_input: dict[str, list] | str, history):
         transformed_input = user_input.get("text", "")
 
     history.append({"role": "user", "content": transformed_input})
-    yield from manager.get_model_response(history)
+    history.append({"role": "assistant", "content": ""})
+
+    for chunk in manager.get_model_response(history):
+        print(chunk, end="", flush=True)
+        history[-1]["content"] += chunk
+        yield history
 
 def main():
     with gr.Blocks() as full_interface:
@@ -63,10 +68,6 @@ def main():
         loaded_models_list, chat_input = load_model(default_model, retain_loaded_models)
         model_select.change(load_model, inputs=[model_select, retain_checkbox], outputs=[loaded_models_list, chat_input])
 
-        chatbot = gr.Chatbot(
-            reasoning_tags=[("<think>", "</think>")],
-        )
-
         with gr.Row():
             with gr.Column(scale=1, min_width=100):
                 new_chat_button = gr.Button(
@@ -83,14 +84,23 @@ def main():
                     type="index",
                 )
             with gr.Column(scale=6):
-                gr.ChatInterface(
-                    chatbot=chatbot,
-                    textbox=chat_input,
-                    # save_history=True,
-                    fn=get_model_response,
+                chatbot = gr.Chatbot(
+                    reasoning_tags=[("<think>", "</think>")],
                 )
 
+            chat_input.submit(
+                get_model_response,
+                inputs=[chat_input, chatbot],
+                outputs=[chatbot],
+                queue=True,
+            )
+
             new_chat_button.click(
+                lambda: [],
+                inputs = None,
+                outputs = [chatbot],
+                queue=False,
+            ).then(
                 history_manager.load_new_conversation,
                 inputs = None,
                 outputs = [chatbot, chat_history_dataset],
@@ -106,6 +116,11 @@ def main():
             # )
 
             chat_history_dataset.click(
+                lambda: [],
+                inputs = None,
+                outputs = [chatbot],
+                queue=False,
+            ).then(
                 history_manager.load_previous_conversation,
                 [chat_history_dataset],
                 [chatbot],
