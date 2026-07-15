@@ -39,7 +39,6 @@ def get_model_response(user_input: dict[str, list] | str, history):
     history.append({"role": "assistant", "content": ""})
 
     for chunk in manager.get_model_response(history):
-        print(chunk, end="", flush=True)
         history[-1]["content"] += chunk
         yield history
 
@@ -100,12 +99,15 @@ def main():
                 inputs=[chat_input, chatbot],
                 outputs=[chatbot],
                 queue=True,
-            )
-
-            chat_input.submit(
+            ).then(
                 lambda: "",
                 inputs=None,
                 outputs=[chat_input],
+                queue=False,
+            ).then(
+                history_manager.update_current_conversation,
+                inputs=[chatbot],
+                outputs=None,
                 queue=False,
             )
 
@@ -130,6 +132,11 @@ def main():
             # )
 
             chat_history_dataset.click(
+                lambda: "",
+                inputs=None,
+                outputs=[chat_input],
+                queue=False,
+            ).then(
                 lambda: [],
                 inputs = None,
                 outputs = [chatbot],
