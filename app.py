@@ -118,6 +118,11 @@ def main():
                 inputs=[chatbot],
                 outputs=None,
                 queue=False,
+            ).then(
+                history_manager.update_conversation_history,
+                inputs = None,
+                outputs = [chat_history_dataset],
+                queue=False,
             )
 
             new_chat_button.click(
@@ -128,7 +133,12 @@ def main():
             ).then(
                 history_manager.load_new_conversation,
                 inputs = None,
-                outputs = [chatbot, chat_history_dataset],
+                outputs = [chatbot],
+                queue=False,
+            ).then(
+                history_manager.update_conversation_history,
+                inputs = None,
+                outputs = [chat_history_dataset],
                 queue=False,
             )
 

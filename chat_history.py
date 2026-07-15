@@ -43,13 +43,7 @@ class ChatHistory:
     def load_new_conversation(self):
         new_conversation = []
         self._add_conversation(new_conversation)
-        return new_conversation, gr.Dataset(
-            samples=[
-                [self._get_conversation_title(conversation_index)]
-                for conversation_index, conversation
-                in enumerate(self.conversations)
-            ]
-        )
+        return new_conversation
 
     def load_previous_conversation(self, index):
         conversation = self._get_conversation(index)
@@ -58,3 +52,12 @@ class ChatHistory:
     
     def update_current_conversation(self, history):
         self._update_conversation(self._current_conversation_index, history)
+
+    def update_conversation_history(self):
+        return gr.Dataset(
+            samples=[
+                [self._get_conversation_title(conversation_index)]
+                for conversation_index, conversation
+                in enumerate(self.conversations)
+            ]
+        )
