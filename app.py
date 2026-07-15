@@ -44,7 +44,7 @@ def get_model_response(user_input: dict[str, list] | str, history):
     yield from manager.get_model_response(history)
 
 def main():
-    with gr.Blocks() as full_interface:
+    with gr.Blocks(title="Foundry Local Chat") as full_interface:
         model_select = gr.Dropdown(
             label="Select Model",
             choices=models,
