@@ -168,7 +168,7 @@ def main():
                 show_progress="hidden",
             )
 
-    full_interface.launch()
+    full_interface.launch(pwa=True)
 
 if __name__ == "__main__":
     main()
