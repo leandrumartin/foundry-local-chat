@@ -52,7 +52,7 @@ def store_user_input_and_clear(user_input: dict[str, list] | str):
     return ""
 
 def main():
-    with gr.Blocks() as full_interface:
+    with gr.Blocks(title="Foundry Local Chat") as full_interface:
         model_select = gr.Dropdown(
             label="Select Model",
             choices=models,

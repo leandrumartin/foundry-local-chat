@@ -48,6 +48,10 @@ python app.py
 
 Gradio will start a local web server and provide a URL you can use to open the chat UI in your browser.
 
+## Linting
+
+Ruff is the preferred linter for the repository. See the documentation at <https://docs.astral.sh/ruff/> for support.
+
 ## Notes
 
 - The first time you run the app, Foundry Local may need to download execution providers and model files.
