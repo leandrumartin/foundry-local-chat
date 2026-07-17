@@ -72,7 +72,7 @@ def main():
             fn=get_model_response,
         )
 
-    full_interface.launch()
+    full_interface.launch(pwa=True)
 
 if __name__ == "__main__":
     main()
