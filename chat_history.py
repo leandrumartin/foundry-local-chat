@@ -67,7 +67,7 @@ class ChatHistory:
                 title += "..."
             return title
         else:
-            return f"New conversation"
+            return "New conversation"
         
     def _update_conversation(self, index: int, history: list[dict]) -> None:
         """Replace or add a conversation at the given index.
