@@ -1,6 +1,7 @@
-import gradio as gr
-import sqlite3
 import json
+import sqlite3
+
+import gradio as gr
 
 
 class ChatHistory:
