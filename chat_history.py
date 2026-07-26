@@ -74,12 +74,10 @@ class ChatHistory:
         Returns:
             list: The list containing all stored conversations.
         """
-        return self.conversations
+        return self._execute_query("SELECT conversation FROM conversations")
     
     def _get_conversation_title(self, index: int) -> str:
-        """Build a short title for a conversation.
-
-        The title is derived from the first message's text (first 40 characters) and ends with an ellipsis if truncated. If the conversation is empty, returns a generic 'New conversation' title.
+        """Get the title of a conversation.
 
         Args:
             index: Index of the conversation to title.
@@ -87,12 +85,13 @@ class ChatHistory:
         Returns:
             A short human-readable title for the conversation.
         """
-        conversation = self._get_conversation(index)
-        if conversation:
-            title = conversation[0]['content'][0]['text'][:40]  # Get the first 40 characters of the first message
-            if len(conversation[0]['content'][0]['text']) > 40:
-                title += "..."
-            return title
+        title = self._execute_query(
+            "SELECT title FROM conversations WHERE id = ?",
+            (index + 1,)
+        )
+
+        if title:
+            return title[0][0]
         else:
             return "New conversation"
         
@@ -108,8 +107,18 @@ class ChatHistory:
         Raises:
             IndexError: If index is out of range for existing conversations.
         """
-        if 0 <= index < len(self.conversations):
+        conversation_count = self._execute_query("SELECT COUNT(id) FROM conversations")[0][0]
+
+        if 0 <= index < conversation_count:
             self.conversations[index] = history
+            self._execute_query(
+                """
+                UPDATE conversations
+                SET title = ?, conversation = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (self._generate_conversation_title(history), json.dumps(history), index + 1)
+            )
         elif len(self.conversations) == 0:
             self._add_conversation(history)
         else:
