@@ -10,7 +10,6 @@ class ChatHistory:
     def __init__(self):
         """Create an empty ChatHistory, initializing the conversations history if it doesn't yet exist.
         """
-        self.conversations = []
         self._current_conversation_index = -1
         db = sqlite3.connect("chat_history.db")
         cursor = db.cursor()
@@ -25,6 +24,7 @@ class ChatHistory:
             )
             """
         )
+        self._conversation_count = self._execute_query("SELECT COUNT(id) FROM conversations")[0][0]
 
     def _add_conversation(self, conversation: list[dict]) -> None:
         """Add a new conversation and set it as the current one.
@@ -32,8 +32,8 @@ class ChatHistory:
         Args:
             conversation: A conversation represented in the format used by Gradio's Chatbot component.
         """
-        self.conversations.append(conversation)
-        self._current_conversation_index = len(self.conversations) - 1
+        self._conversation_count += 1
+        self._current_conversation_index = self._conversation_count - 1
         self._execute_query(
             """
             INSERT INTO conversations (title, conversation)
@@ -54,14 +54,14 @@ class ChatHistory:
         Raises:
             IndexError: If the index is out of range.
         """
-        if 0 <= index < len(self.conversations):
+        if 0 <= index < self._conversation_count:
             return json.loads(
                 self._execute_query(
                     "SELECT conversation FROM conversations WHERE id = ?",
                     (index + 1,)
                 )[0][0]
             )
-        elif len(self.conversations) == 0:
+        elif self._conversation_count == 0:
             new_conversation = []
             self._add_conversation(new_conversation)
             return new_conversation
@@ -107,10 +107,7 @@ class ChatHistory:
         Raises:
             IndexError: If index is out of range for existing conversations.
         """
-        conversation_count = self._execute_query("SELECT COUNT(id) FROM conversations")[0][0]
-
-        if 0 <= index < conversation_count:
-            self.conversations[index] = history
+        if 0 <= index < self._conversation_count:
             self._execute_query(
                 """
                 UPDATE conversations
@@ -119,7 +116,7 @@ class ChatHistory:
                 """,
                 (self._generate_conversation_title(history), json.dumps(history), index + 1)
             )
-        elif len(self.conversations) == 0:
+        elif self._conversation_count == 0:
             self._add_conversation(history)
         else:
             raise IndexError("Conversation index out of range.")
@@ -194,10 +191,8 @@ class ChatHistory:
         Returns:
             Dataset with one sample per stored conversation.
         """
+        conversation_titles = self._execute_query("SELECT title FROM conversations")
+
         return gr.Dataset(
-            samples=[
-                [self._get_conversation_title(conversation_index)]
-                for conversation_index, conversation
-                in enumerate(self.conversations)
-            ]
+            samples=conversation_titles
         )
