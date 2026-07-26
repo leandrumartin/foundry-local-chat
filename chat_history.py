@@ -1,4 +1,6 @@
 import gradio as gr
+import sqlite3
+import json
 
 
 class ChatHistory:
@@ -10,6 +12,19 @@ class ChatHistory:
         """
         self.conversations = []
         self._current_conversation_index = -1
+        db = sqlite3.connect("chat_history.db")
+        cursor = db.cursor()
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS conversations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                title TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
+                conversation BLOB
+            )
+            """
+        )
 
     def _add_conversation(self, conversation: list[dict]) -> None:
         """Add a new conversation and set it as the current one.
@@ -19,6 +34,13 @@ class ChatHistory:
         """
         self.conversations.append(conversation)
         self._current_conversation_index = len(self.conversations) - 1
+        self._execute_query(
+            """
+            INSERT INTO conversations (title, conversation)
+            VALUES (?, ?)
+            """,
+            (self._generate_conversation_title(conversation), json.dumps(conversation))
+        )
 
     def _get_conversation(self, index: int) -> list[dict]:
         """Return the conversation at the given index, or create one if empty.
@@ -33,7 +55,12 @@ class ChatHistory:
             IndexError: If the index is out of range.
         """
         if 0 <= index < len(self.conversations):
-            return self.conversations[index]
+            return json.loads(
+                self._execute_query(
+                    "SELECT conversation FROM conversations WHERE id = ?",
+                    (index + 1,)
+                )[0][0]
+            )
         elif len(self.conversations) == 0:
             new_conversation = []
             self._add_conversation(new_conversation)
@@ -87,6 +114,37 @@ class ChatHistory:
             self._add_conversation(history)
         else:
             raise IndexError("Conversation index out of range.")
+        
+    def _generate_conversation_title(self, conversation: list[dict]) -> str:
+        """Generate a title for a conversation based on its first message.
+
+        The title is derived from the first message's text (first 40 characters) and ends with an ellipsis if truncated. If the conversation is empty, returns a generic 'New conversation' title.
+
+        Args:
+            conversation: The conversation to generate a title for.
+        """
+        if conversation:
+            title = conversation[0]['content'][0]['text'][:40]  # Get the first 40 characters of the first message
+            if len(conversation[0]['content'][0]['text']) > 40:
+                title += "..."
+            return title
+        else:
+            return "New conversation"
+        
+    def _execute_query(self, query: str, params: tuple = ()) -> list:
+        """Execute a SQL query and return the results.
+
+        Args:
+            query: The SQL query to execute.
+            params: Optional parameters for the SQL query.
+        """
+        db = sqlite3.connect("chat_history.db")
+        cursor = db.cursor()
+        cursor.execute(query, params)
+        results = cursor.fetchall()
+        db.commit()
+        db.close()
+        return results
     
     def load_new_conversation(self) -> list[dict]:
         """Create and load a new empty conversation.
