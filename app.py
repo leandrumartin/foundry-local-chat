@@ -142,14 +142,6 @@ def main():
                 queue=False,
             )
 
-            # gr.on(
-            #     triggers=[saved_conversations.change],
-            #     fn=load_chat_history,
-            #     inputs=[saved_conversations],
-            #     outputs=[chat_history_dataset],
-            #     queue=False,
-            # )
-
             chat_history_dataset.click(
                 lambda: "",
                 inputs=None,
@@ -167,6 +159,23 @@ def main():
                 queue=False,
                 show_progress="hidden",
             )
+
+        full_interface.load(
+            history_manager.update_conversation_history,
+            inputs=None,
+            outputs=[chat_history_dataset],
+            queue=False,
+        ).then(
+            history_manager.load_new_conversation,
+            inputs=None,
+            outputs=[chatbot],
+            queue=False,
+        ).then(
+            history_manager.update_conversation_history,
+            inputs=None,
+            outputs=None,
+            queue=False,
+        )
 
     full_interface.launch(pwa=True)
 

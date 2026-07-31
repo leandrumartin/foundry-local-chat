@@ -11,10 +11,7 @@ class ChatHistory:
     def __init__(self):
         """Create an empty ChatHistory, initializing the conversations history if it doesn't yet exist.
         """
-        self._current_conversation_index = -1
-        db = sqlite3.connect("chat_history.db")
-        cursor = db.cursor()
-        cursor.execute(
+        self._execute_query(
             """
             CREATE TABLE IF NOT EXISTS conversations (
                 id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -23,9 +20,9 @@ class ChatHistory:
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP NOT NULL,
                 conversation BLOB
             )
-            """
-        )
+            """)
         self._conversation_count = self._execute_query("SELECT COUNT(id) FROM conversations")[0][0]
+        self._current_conversation_index = self._conversation_count - 1 if self._conversation_count > 0 else 0
 
     def _add_conversation(self, conversation: list[dict]) -> None:
         """Add a new conversation and set it as the current one.
