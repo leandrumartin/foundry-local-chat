@@ -149,6 +149,14 @@ class ChatHistory:
         db.commit()
         db.close()
         return results
+
+    def _correct_index(self, index: int) -> int:
+        """Correct the index from the newest conversation being first (as displayed) to it being last (as handled by the database).
+
+        Args:
+            index: The index to correct.
+        """
+        return self._conversation_count - 1 - index if 0 <= index < self._conversation_count else index
     
     def load_new_conversation(self) -> list[dict]:
         """Create and load a new empty conversation.
@@ -169,6 +177,7 @@ class ChatHistory:
         Returns:
             The conversation at the requested index.
         """
+        index = self._correct_index(index)
         conversation = self._get_conversation(index)
         self._current_conversation_index = index
         return conversation
@@ -192,5 +201,5 @@ class ChatHistory:
         conversation_titles = self._execute_query("SELECT title FROM conversations")
 
         return gr.Dataset(
-            samples=conversation_titles
+            samples=list(reversed(conversation_titles))
         )

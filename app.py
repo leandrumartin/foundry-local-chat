@@ -170,11 +170,6 @@ def main():
             inputs=None,
             outputs=[chatbot],
             queue=False,
-        ).then(
-            history_manager.update_conversation_history,
-            inputs=None,
-            outputs=None,
-            queue=False,
         )
 
     full_interface.launch(pwa=True)
