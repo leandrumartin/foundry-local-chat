@@ -4,6 +4,7 @@ from foundry_local_sdk import Configuration, FoundryLocalManager
 from foundry_local_sdk.imodel import IModel
 from foundry_local_sdk.openai import ChatClient
 
+
 class FoundryManager:
     def __init__(self):
         self._current_model_name: str|None = None

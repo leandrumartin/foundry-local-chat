@@ -1,4 +1,5 @@
 import gradio as gr
+
 from chat_history import ChatHistory
 from foundry import FoundryManager
 
@@ -126,7 +127,7 @@ def main():
             )
 
             new_chat_button.click(
-                lambda: [],
+                list,
                 inputs = None,
                 outputs = [chatbot],
                 queue=False,
@@ -148,7 +149,7 @@ def main():
                 outputs=[chat_input],
                 queue=False,
             ).then(
-                lambda: [],
+                list,
                 inputs = None,
                 outputs = [chatbot],
                 queue=False,
