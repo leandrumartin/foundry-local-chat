@@ -1,4 +1,5 @@
 import gradio as gr
+import threading
 
 from chat_history import ChatHistory
 from foundry import FoundryManager
@@ -19,6 +20,8 @@ history_manager = ChatHistory()
 
 transformed_user_input = ""
 
+generation_stop = threading.Event()
+
 def load_model(model_name, retain):
     manager.load_model(model_name, retain)
 
@@ -33,12 +36,20 @@ def load_model(model_name, retain):
 def get_model_response(history):
     """Get a response from the currently loaded model based on transformed user input and conversation history.
     """
+    generation_stop.clear()
+
     history.append({"role": "user", "content": transformed_user_input})
     history.append({"role": "assistant", "content": ""})
 
     for chunk in manager.get_model_response(history):
+        if generation_stop.is_set():
+            break
         history[-1]["content"] += chunk
         yield history
+
+def stop_generation():
+    """Stop the model generation process."""
+    generation_stop.set()
 
 def store_user_input_and_clear(user_input: dict[str, list] | str):
     """Store the user input for later use. In the case of multimodal input, only the text portion is stored.
@@ -99,16 +110,21 @@ def main():
             model_select.change(
                 load_model,
                 inputs=[model_select, retain_checkbox],
-                outputs=[loaded_models_list, chat_input]
+                outputs=[loaded_models_list]
+            ).then(
+                lambda: "",
+                inputs=None,
+                outputs=[chat_input],
+                queue=False
             )
             
             model_select.change(lambda: "", inputs=None, outputs=[chat_input], queue=False)
 
-            chat_input.submit(
+            submit_event = chat_input.submit(
                 store_user_input_and_clear,
                 inputs=[chat_input],
                 outputs=[chat_input],
-                queue=False,
+                queue=True,
             ).then(
                 get_model_response,
                 inputs=[chatbot],
@@ -118,12 +134,20 @@ def main():
                 history_manager.update_current_conversation,
                 inputs=[chatbot],
                 outputs=None,
-                queue=False,
+                queue=True,
             ).then(
                 history_manager.update_conversation_history,
                 inputs = None,
                 outputs = [chat_history_dataset],
-                queue=False,
+                queue=True,
+            )
+
+            chat_input.stop(
+                stop_generation,
+                inputs=None,
+                outputs=None,
+                cancels=[submit_event],
+                queue=False
             )
 
             new_chat_button.click(
