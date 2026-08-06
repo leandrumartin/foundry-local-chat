@@ -117,8 +117,6 @@ def main():
                 outputs=[chat_input],
                 queue=False
             )
-            
-            model_select.change(lambda: "", inputs=None, outputs=[chat_input], queue=False)
 
             submit_event = chat_input.submit(
                 store_user_input_and_clear,

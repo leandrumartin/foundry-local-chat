@@ -185,6 +185,7 @@ class ChatHistory:
         index = self._correct_index(index)
         conversation = self._get_conversation(index)
         self._current_conversation_index = index
+        self._blank_conversation = False
         return conversation
     
     def update_current_conversation(self, history: list[dict]) -> None:
