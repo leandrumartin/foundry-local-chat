@@ -132,9 +132,16 @@ class ChatHistory:
             conversation: The conversation to generate a title for.
         """
         if conversation:
-            title = conversation[0]['content'][0]['text'][:40]  # Get the first 40 characters of the first message
-            if len(conversation[0]['content'][0]['text']) > 40:
+            first_content = conversation[0]['content']
+            if isinstance(first_content, str):
+                first_content_text = first_content
+            else:
+                first_content_text = conversation[0]['content'][0]['text'] # Expected structure if not str
+
+            title = first_content_text[:40]  # Get the first 40 characters of the first message
+            if len(first_content_text) > 40:
                 title += "..."
+
             return title
         else:
             return "New conversation"
