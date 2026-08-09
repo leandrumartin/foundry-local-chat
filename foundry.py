@@ -4,6 +4,7 @@ from foundry_local_sdk import Configuration, FoundryLocalManager
 from foundry_local_sdk.imodel import IModel
 from foundry_local_sdk.openai import ChatClient
 
+
 class FoundryManager:
     def __init__(self):
         self._current_model_name: str|None = None
@@ -87,14 +88,12 @@ class FoundryManager:
         history = self._cleaned_history(history)
 
         # Stream the response token by token
-        full_response = ""
         for chunk in self._client.complete_streaming_chat(history):
             if not chunk.choices:
                 continue
             content = chunk.choices[0].delta.content
             if content:
-                full_response += content
-            yield full_response
+                yield content
 
     def unload_model(self, model_name: str) -> None:
         """Unload a model from memory. If the model is not loaded, does nothing."""
