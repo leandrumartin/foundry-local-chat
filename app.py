@@ -1,5 +1,7 @@
-import gradio as gr
 import threading
+from dataclasses import dataclass, field
+
+import gradio as gr
 
 from chat_history import ChatHistory
 from foundry import FoundryManager
@@ -13,16 +15,40 @@ except FileNotFoundError:
     models = ["qwen2.5-0.5b"]
 
 default_model = models[0]
-retain_loaded_models = False
+manager: FoundryManager = FoundryManager()
 
-manager = FoundryManager()
-history_manager = ChatHistory()
 
-transformed_user_input = ""
+@dataclass
+class SessionContext:
+    """A dataclass to hold serializable session context for the Gradio interface."""
+    retain_loaded_models: bool = False
+    pending_user_input: str = ""
 
-generation_stop = threading.Event()
 
-def load_model(model_name, retain):
+@dataclass
+class RuntimeContext:
+    """A dataclass to hold non-serializable runtime context for the Gradio interface."""
+    history_manager: ChatHistory = field(default_factory=ChatHistory)
+    stop_event: threading.Event = field(default_factory=threading.Event)
+
+
+runtime_store = {}
+
+def initialize_runtime(request: gr.Request):
+    """Initialize the runtime context for the current session."""
+    runtime_store[request.session_hash] = RuntimeContext()
+
+def cleanup_runtime(request: gr.Request):
+    """Clean up the runtime context for the current session."""
+    if request.session_hash in runtime_store:
+        del runtime_store[request.session_hash]
+
+def get_runtime(request: gr.Request):
+    """Get the runtime context for the current session."""
+    return runtime_store[request.session_hash]
+
+def load_model(model_name: str, retain: bool = False):
+    """Load a model into memory. If retain is False, unloads all other models except the one being loaded."""
     manager.load_model(model_name, retain)
 
     loaded_models_list = gr.Textbox(
@@ -33,38 +59,59 @@ def load_model(model_name, retain):
 
     return loaded_models_list
 
-def get_model_response(history):
+def get_model_response(history, session: SessionContext, request: gr.Request):
     """Get a response from the currently loaded model based on transformed user input and conversation history.
     """
-    generation_stop.clear()
+    runtime = get_runtime(request)
+    runtime.stop_event.clear()
 
-    history.append({"role": "user", "content": transformed_user_input})
+    history.append({"role": "user", "content": session.pending_user_input})
     history.append({"role": "assistant", "content": ""})
 
     for chunk in manager.get_model_response(history):
-        if generation_stop.is_set():
+        if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk
         yield history
 
-def stop_generation():
+def stop_generation(request: gr.Request):
     """Stop the model generation process."""
-    generation_stop.set()
+    runtime = get_runtime(request)
+    runtime.stop_event.set()
 
-def store_user_input_and_clear(user_input: dict[str, list] | str):
+def store_user_input_and_clear(user_input: dict[str, list] | str, session: SessionContext, request: gr.Request):
     """Store the user input for later use. In the case of multimodal input, only the text portion is stored.
     Returns an empty string to clear the input field in the UI."""
     if isinstance(user_input, str):
-        transformed_input = user_input
+        session.pending_user_input = user_input
     else:
-        transformed_input = user_input.get("text", "")
+        session.pending_user_input = str(user_input.get("text", ""))
+    return "", session
 
-    global transformed_user_input
-    transformed_user_input = transformed_input
-    return ""
+def update_conversation_history(request: gr.Request):
+    """Update the conversation history in the UI."""
+    runtime = get_runtime(request)
+    return runtime.history_manager.update_conversation_history()
+
+def update_current_conversation(history, request: gr.Request):
+    """Update the current conversation in the UI."""
+    runtime = get_runtime(request)
+    runtime.history_manager.update_current_conversation(history)
+
+def load_new_conversation(request: gr.Request):
+    """Load a new conversation in the UI."""
+    runtime = get_runtime(request)
+    return runtime.history_manager.load_new_conversation()
+
+def load_previous_conversation(index: int, request: gr.Request):
+    """Load a previous conversation from the history in the UI."""
+    runtime = get_runtime(request)
+    return runtime.history_manager.load_previous_conversation(index)
 
 def main():
     with gr.Blocks(title="Foundry Local Chat") as full_interface:
+        session_state = gr.State(SessionContext())
+
         model_select = gr.Dropdown(
             label="Select Model",
             choices=models,
@@ -74,11 +121,11 @@ def main():
 
         retain_checkbox = gr.Checkbox(
             label="Retain Loaded Models",
-            value=retain_loaded_models,
+            value=session_state.value.retain_loaded_models,
             interactive=True,
         )
 
-        loaded_models_list = load_model(default_model, retain_loaded_models)
+        loaded_models_list = load_model(default_model)
 
         with gr.Row():
             with gr.Column(scale=1, min_width=100):
@@ -120,21 +167,21 @@ def main():
 
             submit_event = chat_input.submit(
                 store_user_input_and_clear,
-                inputs=[chat_input],
-                outputs=[chat_input],
+                inputs=[chat_input, session_state],
+                outputs=[chat_input, session_state],
                 queue=True,
             ).then(
                 get_model_response,
-                inputs=[chatbot],
+                inputs=[chatbot, session_state],
                 outputs=[chatbot],
                 queue=True,
             ).then(
-                history_manager.update_current_conversation,
+                update_current_conversation,
                 inputs=[chatbot],
                 outputs=None,
                 queue=True,
             ).then(
-                history_manager.update_conversation_history,
+                update_conversation_history,
                 inputs = None,
                 outputs = [chat_history_dataset],
                 queue=True,
@@ -154,12 +201,12 @@ def main():
                 outputs = [chatbot],
                 queue=False,
             ).then(
-                history_manager.load_new_conversation,
+                load_new_conversation,
                 inputs = None,
                 outputs = [chatbot],
                 queue=False,
             ).then(
-                history_manager.update_conversation_history,
+                update_conversation_history,
                 inputs = None,
                 outputs = [chat_history_dataset],
                 queue=False,
@@ -176,7 +223,7 @@ def main():
                 outputs = [chatbot],
                 queue=False,
             ).then(
-                history_manager.load_previous_conversation,
+                load_previous_conversation,
                 [chat_history_dataset],
                 [chatbot],
                 queue=False,
@@ -184,15 +231,24 @@ def main():
             )
 
         full_interface.load(
-            history_manager.update_conversation_history,
+            initialize_runtime,
+            inputs=None,
+            outputs=None,
+            queue=True,
+        ).then(
+            update_conversation_history,
             inputs=None,
             outputs=[chat_history_dataset],
             queue=False,
         ).then(
-            history_manager.load_new_conversation,
+            load_new_conversation,
             inputs=None,
             outputs=[chatbot],
             queue=False,
+        )
+
+        full_interface.unload(
+            cleanup_runtime,
         )
 
     full_interface.launch(pwa=True)
