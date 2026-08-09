@@ -66,6 +66,8 @@ def get_model_response(history, session: SessionContext, request: gr.Request):
     runtime.stop_event.clear()
 
     history.append({"role": "user", "content": session.pending_user_input})
+    yield history
+    
     history.append({"role": "assistant", "content": ""})
 
     for chunk in manager.get_model_response(history):
@@ -199,34 +201,34 @@ def main():
                 list,
                 inputs = None,
                 outputs = [chatbot],
-                queue=False,
+                queue=True,
             ).then(
                 load_new_conversation,
                 inputs = None,
                 outputs = [chatbot],
-                queue=False,
+                queue=True,
             ).then(
                 update_conversation_history,
                 inputs = None,
                 outputs = [chat_history_dataset],
-                queue=False,
+                queue=True,
             )
 
             chat_history_dataset.click(
                 lambda: "",
                 inputs=None,
                 outputs=[chat_input],
-                queue=False,
+                queue=True,
             ).then(
                 list,
                 inputs = None,
                 outputs = [chatbot],
-                queue=False,
+                queue=True,
             ).then(
                 load_previous_conversation,
                 [chat_history_dataset],
                 [chatbot],
-                queue=False,
+                queue=True,
                 show_progress="hidden",
             )
 

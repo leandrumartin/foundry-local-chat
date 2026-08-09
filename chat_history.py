@@ -21,9 +21,13 @@ class ChatHistory:
                 conversation BLOB
             )
             """)
-        self._conversation_count = self._execute_query("SELECT COUNT(id) FROM conversations")[0][0]
+        self._refresh_conversation_count()
         self._current_conversation_index = self._conversation_count - 1 if self._conversation_count > 0 else 0
         self._blank_conversation = True
+
+    def _refresh_conversation_count(self):
+        """Refresh the internal count of conversations in the database."""
+        self._conversation_count = self._execute_query("SELECT COUNT(id) FROM conversations")[0][0]
 
     def _add_conversation(self, conversation: list[dict]) -> None:
         """Add a new conversation to the database.
@@ -31,6 +35,7 @@ class ChatHistory:
         Args:
             conversation: A conversation represented in the format used by Gradio's Chatbot component.
         """
+        self._refresh_conversation_count()
         self._execute_query(
             """
             INSERT INTO conversations (title, conversation)
@@ -52,6 +57,7 @@ class ChatHistory:
         Raises:
             IndexError: If the index is out of range.
         """
+        self._refresh_conversation_count()
         if 0 <= index < self._conversation_count:
             return json.loads(
                 self._execute_query(
@@ -105,6 +111,7 @@ class ChatHistory:
         Raises:
             IndexError: If index is out of range for existing conversations.
         """
+        self._refresh_conversation_count()
         if self._blank_conversation:
             # Conversation was initialized blank earlier, so it wasn't added to the database. Add it now.
             self._add_conversation(history)
@@ -167,6 +174,7 @@ class ChatHistory:
         Args:
             index: The index to correct.
         """
+        self._refresh_conversation_count()
         return self._conversation_count - 1 - index if 0 <= index < self._conversation_count else index
     
     def load_new_conversation(self) -> list[dict]:
@@ -175,6 +183,7 @@ class ChatHistory:
         Returns:
             The newly created conversation (empty list).
         """
+        self._refresh_conversation_count()
         new_conversation = []
         self._current_conversation_index = self._conversation_count
         self._blank_conversation = True
@@ -201,6 +210,7 @@ class ChatHistory:
         Args:
             history: New conversation history to store for the current conversation index. Should be structured as a list of message dictionaries, in the format used by Gradio's Chatbot component.
         """
+        self._refresh_conversation_count()
         if self._conversation_count == 0:
             self._current_conversation_index = 0
         self._update_conversation(self._current_conversation_index, history)
@@ -213,8 +223,8 @@ class ChatHistory:
         Returns:
             Dataset with one sample per stored conversation.
         """
-        conversation_titles = self._execute_query("SELECT title FROM conversations")
+        conversation_titles = self._execute_query("SELECT title FROM conversations ORDER BY id DESC")
 
         return gr.Dataset(
-            samples=list(reversed(conversation_titles))
+            samples=list(conversation_titles)
         )
