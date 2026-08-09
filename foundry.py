@@ -105,7 +105,7 @@ class FoundryManager:
             self.loaded_model_names.remove(model_name)
             print(f"Model '{model_name}' unloaded.")
 
-    def unload_all_models(self, exceptions: list[str] = []) -> None:
+    def unload_all_models(self, exceptions: list[str]|None = None) -> None:
         """Unload all models from memory, except those specified in the exceptions list."""
 
         for model_name in self.loaded_model_names:
