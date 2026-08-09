@@ -45,6 +45,8 @@ def cleanup_runtime(request: gr.Request):
 
 def get_runtime(request: gr.Request):
     """Get the runtime context for the current session."""
+    if request.session_hash not in runtime_store:
+        initialize_runtime(request)
     return runtime_store[request.session_hash]
 
 def load_model(model_name: str, retain: bool = False):
@@ -67,7 +69,7 @@ def get_model_response(history, session: SessionContext, request: gr.Request):
 
     history.append({"role": "user", "content": session.pending_user_input})
     yield history
-    
+
     history.append({"role": "assistant", "content": ""})
 
     for chunk in manager.get_model_response(history):
