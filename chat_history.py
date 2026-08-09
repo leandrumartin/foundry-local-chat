@@ -67,7 +67,6 @@ class ChatHistory:
             )
         elif self._conversation_count == 0 or index == self._conversation_count:
             new_conversation = []
-            self._add_conversation(new_conversation)
             return new_conversation
         else:
             raise IndexError("Conversation index out of range.")
