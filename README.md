@@ -60,7 +60,6 @@ Ruff is the preferred linter for the repository. See the documentation at <https
 ## Planned Features
 
 - Better management for loading and unloading models
-- Store chat history permanently
 - Support for attached files (Foundry Local does not support image recognition models, but support is planned for attaching text-based files and audio files for use with transcription models)
 - Filter and select models by fields such as number of parameters, tool support, reasoning support, and context length
 - MCP tool support
