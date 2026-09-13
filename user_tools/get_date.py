@@ -1,4 +1,4 @@
-from add_tool import add_tool
+from tool_registry import add_tool
 import datetime
 
 function_info = {
