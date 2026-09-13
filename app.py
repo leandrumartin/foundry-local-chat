@@ -5,6 +5,9 @@ import gradio as gr
 
 from chat_history import ChatHistory
 from foundry import FoundryManager
+from user_tools import load_tools
+
+load_tools()
 
 try:
     with open("models.txt", "r") as f:
