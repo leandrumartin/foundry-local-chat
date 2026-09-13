@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 
 import gradio as gr
 
+import tool_registry
 from chat_history import ChatHistory
 from foundry import FoundryManager
 from user_tools import load_tools
@@ -71,14 +72,17 @@ def get_model_response(history, session: SessionContext, request: gr.Request):
     runtime.stop_event.clear()
 
     history.append({"role": "user", "content": session.pending_user_input})
+    print(f"\nUser input: {session.pending_user_input}")
     yield history
 
     history.append({"role": "assistant", "content": ""})
+    print("Model response: ", end="", flush=True)
 
-    for chunk in manager.get_model_response(history):
+    for chunk in manager.get_model_response(history, available_tools = tool_registry.get_tool_schemas()):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk
+        print(chunk, end="", flush=True)
         yield history
 
 def stop_generation(request: gr.Request):

@@ -75,7 +75,7 @@ class FoundryManager:
         self._model = self.get_loaded_model(model_name)
         self._client = self._model.get_chat_client()
 
-    def get_model_response(self, history: list[dict]) -> Generator[str]:
+    def get_model_response(self, history: list[dict], available_tools) -> Generator[str]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -88,7 +88,7 @@ class FoundryManager:
         history = self._cleaned_history(history)
 
         # Stream the response token by token
-        for chunk in self._client.complete_streaming_chat(history):
+        for chunk in self._client.complete_streaming_chat(history, tools=available_tools):
             if not chunk.choices:
                 continue
             content = chunk.choices[0].delta.content

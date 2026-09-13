@@ -1,5 +1,7 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Any
+from typing import Any
+
 
 @dataclass
 class Tool:
@@ -40,10 +42,12 @@ def get_tool_schemas() -> list[dict]:
     return [
         {
             "type": "function",
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": tool.parameters,
-            "strict": True,
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.parameters,
+                "strict": True,
+            }
         }
         for tool in _tools.values()
     ]
