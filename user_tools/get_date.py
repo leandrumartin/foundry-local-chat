@@ -1,13 +1,11 @@
-from tool_registry import add_tool
+from tool_registry import register_tool
 import datetime
 
-function_info = {
-    "name": "get_date",
-    "description": "Get the current date",
-    "parameters": {},
-}
-
-@add_tool(function_info)
+@register_tool(
+    name = "get_date",
+    description = "Get the current date",
+    parameters = {},
+)
 def get_date():
     """Get current date."""
     return datetime.datetime.now().strftime("%Y-%m-%d")

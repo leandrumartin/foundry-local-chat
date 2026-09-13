@@ -11,14 +11,25 @@ class Tool:
 
 _tools: dict[str, Tool] = {}
 
-def add_tool(function_info):
-    """Decorator to register a function as a tool with its metadata."""
+def register_tool(
+    *,
+    name: str,
+    description: str,
+    parameters: dict,
+):
+    """Decorator to register a function as a tool with its metadata.
+    
+    Args:
+        name (str): The name of the tool.
+        description (str): A brief description of the tool.
+        parameters (dict): A dictionary describing the parameters of the tool.
+    """
     def decorator(func):
-        function_name: str = function_info.get("name", func.__name__)
+        function_name: str = name or func.__name__
         _tools[function_name] = Tool(
             name = function_name,
-            description = function_info.get("description", func.__doc__),
-            parameters = function_info.get("parameters", func.__annotations__),
+            description = description or func.__doc__ or "",
+            parameters = parameters or func.__annotations__,
             function = func
         )
         return func
