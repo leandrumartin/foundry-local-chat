@@ -81,8 +81,10 @@ def get_model_response(history, session: SessionContext, request: gr.Request):
     for chunk in manager.get_model_response(history, available_tools = tool_registry.get_tool_schemas()):
         if runtime.stop_event.is_set():
             break
-        history[-1]["content"] += chunk
-        print(chunk, end="", flush=True)
+        history[-1]["content"] += chunk[0]
+        print(chunk[0], end="", flush=True)
+        if chunk[1]:
+            print(f"\nTool calls: {chunk[1]}")
         yield history
 
 def stop_generation(request: gr.Request):

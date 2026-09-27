@@ -75,7 +75,7 @@ class FoundryManager:
         self._model = self.get_loaded_model(model_name)
         self._client = self._model.get_chat_client()
 
-    def get_model_response(self, history: list[dict], available_tools) -> Generator[str]:
+    def get_model_response(self, history: list[dict], available_tools, tool_choice: str|None = None) -> Generator[tuple[str, list | None]]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -84,6 +84,11 @@ class FoundryManager:
 
         if self._client is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
+
+        if tool_choice:
+            self._client.settings.tool_choice = {"type": tool_choice}
+        else:
+            self._client.settings.tool_choice = {"type": "required"}
         
         history = self._cleaned_history(history)
 
@@ -92,8 +97,11 @@ class FoundryManager:
             if not chunk.choices:
                 continue
             content = chunk.choices[0].delta.content
+            tool_calls = chunk.choices[0].delta.tool_calls
             if content:
-                yield content
+                yield content, tool_calls
+            else:
+                yield "", tool_calls
 
     def unload_model(self, model_name: str) -> None:
         """Unload a model from memory. If the model is not loaded, does nothing."""
