@@ -88,7 +88,7 @@ class FoundryManager:
         if tool_choice:
             self._client.settings.tool_choice = {"type": tool_choice}
         else:
-            self._client.settings.tool_choice = {"type": "required"}
+            self._client.settings.tool_choice = {"type": "auto"}
         
         history = self._cleaned_history(history)
 

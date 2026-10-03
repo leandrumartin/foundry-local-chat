@@ -1,5 +1,6 @@
 import threading
 from dataclasses import dataclass, field
+import json
 
 import gradio as gr
 
@@ -65,27 +66,60 @@ def load_model(model_name: str, retain: bool = False):
 
     return loaded_models_list
 
-def get_model_response(history, session: SessionContext, request: gr.Request):
+def get_model_response(history, session: SessionContext, request: gr.Request, tool_choice: str|None = None):
     """Get a response from the currently loaded model based on transformed user input and conversation history.
     """
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
-    history.append({"role": "user", "content": session.pending_user_input})
-    print(f"\nUser input: {session.pending_user_input}")
-    yield history
+    if session.pending_user_input != "":
+        history.append({"role": "user", "content": session.pending_user_input})
+        print(f"\nUser input: {session.pending_user_input}")
+        session.pending_user_input = ""
+        yield history
 
     history.append({"role": "assistant", "content": ""})
     print("Model response: ", end="", flush=True)
 
-    for chunk in manager.get_model_response(history, available_tools = tool_registry.get_tool_schemas()):
+    tool_calls = []
+    for chunk in manager.get_model_response(history, available_tools = tool_registry.get_tool_schemas(), tool_choice=tool_choice):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk[0]
         print(chunk[0], end="", flush=True)
         if chunk[1]:
-            print(f"\nTool calls: {chunk[1]}")
+            tool_calls.extend(chunk[1])
         yield history
+
+    # If the model made tool calls, call the tools, append outputs to history, and get a new response from the model
+    if len(tool_calls) > 0:
+        tool_functions = tool_registry.get_tool_functions()
+        for tool_call in tool_calls:
+            tool_name = tool_call.function.name
+            tool_args = json.loads(tool_call.function.arguments)
+            if tool_args is None:
+                tool_args = {}
+            if tool_name in tool_functions:
+                print(f"\nCalling tool: {tool_name} with arguments: {tool_args}")
+                try:
+                    tool_output = tool_functions[tool_name](**tool_args)
+                    print(f"Tool output: {tool_output}")
+                    history.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": json.dumps(tool_output),
+                        }
+                    )
+                except Exception as e:
+                    print(f"Error calling tool '{tool_name}': {e}")
+                    history.append({"role": "assistant", "content": f"Error calling tool '{tool_name}': {e}"})
+            else:
+                print(f"Tool '{tool_name}' not found.")
+                history.append({"role": "assistant", "content": f"Tool '{tool_name}' not found."})
+
+        # Get a new response from the model after the tool calls
+        yield from get_model_response(history, session, request, tool_choice="auto" if tool_choice == "required" else tool_choice) # "auto" overrides "required" so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
@@ -158,7 +192,7 @@ def main():
             with gr.Column(scale=6):
                 chatbot = gr.Chatbot(
                     reasoning_tags=[("<think>", "</think>")],
-                )
+                    )
 
                 chat_input = gr.MultimodalTextbox(
                     interactive=True,
