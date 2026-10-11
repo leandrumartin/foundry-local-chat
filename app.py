@@ -1,6 +1,6 @@
+import json
 import threading
 from dataclasses import dataclass, field
-import json
 
 import gradio as gr
 
