@@ -10,6 +10,7 @@ from foundry import FoundryManager
 from user_tools import load_tools
 
 load_tools()
+available_tools: list = tool_registry.get_tool_schemas()
 
 try:
     with open("models.txt", "r") as f:
@@ -66,9 +67,18 @@ def load_model(model_name: str, retain: bool = False):
 
     return loaded_models_list
 
-def get_model_response(history, session: SessionContext, request: gr.Request, tool_choice: str|None = None):
+def get_model_response(history, session: SessionContext, available_tools: list[str]|list[dict], request: gr.Request, tool_choice: str|None = None):
     """Get a response from the currently loaded model based on transformed user input and conversation history.
     """
+    try:
+        if isinstance(available_tools, list) and all(isinstance(tool, str) for tool in available_tools):
+            available_tools = [json.loads(tool) for tool in available_tools]
+
+    except json.JSONDecodeError:
+        available_tools = []
+
+    print(f"available_tools: {available_tools}")
+
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
@@ -82,7 +92,7 @@ def get_model_response(history, session: SessionContext, request: gr.Request, to
     print("Model response: ", end="", flush=True)
 
     tool_calls = []
-    for chunk in manager.get_model_response(history, available_tools = tool_registry.get_tool_schemas(), tool_choice=tool_choice):
+    for chunk in manager.get_model_response(history, available_tools = available_tools, tool_choice=tool_choice):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk[0]
@@ -119,7 +129,7 @@ def get_model_response(history, session: SessionContext, request: gr.Request, to
                 history.append({"role": "assistant", "content": f"Tool '{tool_name}' not found."})
 
         # Get a new response from the model after the tool calls
-        yield from get_model_response(history, session, request, tool_choice="auto" if tool_choice == "required" else tool_choice) # "auto" overrides "required" so it's not stuck in an infinite loop of tool calls
+        yield from get_model_response(history, session, available_tools, request, tool_choice="auto" if tool_choice == "required" else tool_choice) # "auto" overrides "required" so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
@@ -154,6 +164,14 @@ def load_previous_conversation(index: int, request: gr.Request):
     """Load a previous conversation from the history in the UI."""
     runtime = get_runtime(request)
     return runtime.history_manager.load_previous_conversation(index)
+
+def toggle_tool_usage(tool_schema: dict, use_tool: bool):
+    """Toggle the usage of a tool in the model's response generation."""
+    if use_tool:
+        if tool_schema not in available_tools:
+            available_tools.append(tool_schema)
+    else:
+        available_tools.remove(tool_schema)
 
 def main():
     with gr.Blocks(title="Foundry Local Chat") as full_interface:
@@ -200,6 +218,21 @@ def main():
                     stop_btn=True,
                     placeholder="Ask anything...",
                 )
+            with gr.Column(scale=1, min_width=100):
+                gr.Markdown("### Tools")
+
+                enabled_tools = gr.CheckboxGroup(
+                    label="Enabled Tools",
+                    choices=[(tool_schema["function"]["name"],  json.dumps(tool_schema)) for tool_schema in tool_registry.get_tool_schemas()],
+                    interactive=True,
+                )
+
+                tool_choice = gr.Radio(
+                    label="Tool Choice",
+                    choices=["auto", "required", "none"],
+                    value="auto",
+                    interactive=True,
+                )
 
             model_select.change(
                 load_model,
@@ -219,7 +252,7 @@ def main():
                 queue=True,
             ).then(
                 get_model_response,
-                inputs=[chatbot, session_state],
+                inputs=[chatbot, session_state, enabled_tools, tool_choice],
                 outputs=[chatbot],
                 queue=True,
             ).then(
