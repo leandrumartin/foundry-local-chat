@@ -8,7 +8,7 @@ from foundry_local_sdk.openai import ChatClient
 class FoundryManager:
     def __init__(self):
         self._current_model_name: str|None = None
-        self._model: IModel|None = None
+        self.model: IModel|None = None
         self._client: ChatClient|None = None
         self._manager: FoundryLocalManager = self._get_initialized_manager()
         self.loaded_model_names: list[str] = []
@@ -72,8 +72,8 @@ class FoundryManager:
         self._current_model_name = model_name
         if model_name not in self.loaded_model_names:
             self.loaded_model_names.append(model_name)
-        self._model = self.get_loaded_model(model_name)
-        self._client = self._model.get_chat_client()
+        self.model = self.get_loaded_model(model_name)
+        self._client = self.model.get_chat_client()
 
     def get_model_response(self, history: list[dict], available_tools, tool_choice: str|None = None) -> Generator[tuple[str, list | None]]:
         """Get a response from the currently loaded model based on user input and conversation history.
