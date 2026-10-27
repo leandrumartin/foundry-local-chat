@@ -1,15 +1,21 @@
 from collections.abc import Generator
 
-from foundry_local_sdk import Configuration, FoundryLocalManager
+from foundry_local_sdk import (
+    ChatSession,
+    Configuration,
+    FoundryLocalManager,
+    MessageItem,
+    Request,
+    TextItem,
+)
 from foundry_local_sdk.imodel import IModel
-from foundry_local_sdk.openai import ChatClient
 
 
 class FoundryManager:
     def __init__(self):
         self._current_model_name: str|None = None
         self._model: IModel|None = None
-        self._client: ChatClient|None = None
+        self.session: ChatSession|None = None
         self._manager: FoundryLocalManager = self._get_initialized_manager()
         self.loaded_model_names: list[str] = []
 
@@ -73,7 +79,7 @@ class FoundryManager:
         if model_name not in self.loaded_model_names:
             self.loaded_model_names.append(model_name)
         self._model = self.get_loaded_model(model_name)
-        self._client = self._model.get_chat_client()
+        self.session = ChatSession(self._model)
 
     def get_model_response(self, history: list[dict]) -> Generator[str]:
         """Get a response from the currently loaded model based on user input and conversation history.
@@ -82,18 +88,20 @@ class FoundryManager:
             ValueError: If no model is currently loaded.
         """
 
-        if self._client is None:
+        if self.session is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
         
         history = self._cleaned_history(history)
 
         # Stream the response token by token
-        for chunk in self._client.complete_streaming_chat(history):
-            if not chunk.choices:
-                continue
-            content = chunk.choices[0].delta.content
-            if content:
-                yield content
+        self.session.set_streaming(True)
+        with Request() as request:
+            for message in history:
+                request.add_item(MessageItem.user(message["content"]))
+
+            for item in self.session.process_streaming_request(request):
+                if isinstance(item, TextItem):
+                    yield item.text
 
     def unload_model(self, model_name: str) -> None:
         """Unload a model from memory. If the model is not loaded, does nothing."""
@@ -132,3 +140,9 @@ class FoundryManager:
             cleaned_history.append(cleaned_entry)
 
         return cleaned_history
+
+    def load_new_session(self) -> None:
+        """Create a new chat session for the currently loaded model. Raises an error if no model is loaded."""
+        if self._model is None:
+            raise ValueError("No model is currently loaded. Please load a model first.")
+        self.session = ChatSession(self._model)

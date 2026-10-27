@@ -17,6 +17,7 @@ except FileNotFoundError:
 default_model = models[0]
 manager: FoundryManager = FoundryManager()
 
+rebuild_history = True  # Flag to indicate whether to rebuild the conversation history in the manager
 
 @dataclass
 class SessionContext:
@@ -61,18 +62,28 @@ def load_model(model_name: str, retain: bool = False):
 
     return loaded_models_list
 
-def get_model_response(history, session: SessionContext, request: gr.Request):
-    """Get a response from the currently loaded model based on transformed user input and conversation history.
+def get_model_response(history: list[dict], session: SessionContext, request: gr.Request):
+    """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
+    global rebuild_history
+
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
-    history.append({"role": "user", "content": session.pending_user_input})
+    user_input_object = {"role": "user", "content": session.pending_user_input}
+
+    history.append(user_input_object)
     yield history
 
     history.append({"role": "assistant", "content": ""})
 
-    for chunk in manager.get_model_response(history):
+    if rebuild_history:
+        history_to_pass = history
+        rebuild_history = False
+    else:
+        history_to_pass = [user_input_object]
+
+    for chunk in manager.get_model_response(history_to_pass):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk
@@ -105,11 +116,15 @@ def update_current_conversation(history, request: gr.Request):
 def load_new_conversation(request: gr.Request):
     """Load a new conversation in the UI."""
     runtime = get_runtime(request)
+    manager.load_new_session()
     return runtime.history_manager.load_new_conversation()
 
 def load_previous_conversation(index: int, request: gr.Request):
     """Load a previous conversation from the history in the UI."""
     runtime = get_runtime(request)
+    manager.load_new_session()
+    global rebuild_history
+    rebuild_history = True
     return runtime.history_manager.load_previous_conversation(index)
 
 def main():
