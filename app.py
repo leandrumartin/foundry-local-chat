@@ -40,8 +40,10 @@ def initialize_runtime(request: gr.Request):
 
 def cleanup_runtime(request: gr.Request):
     """Clean up the runtime context for the current session."""
+    assert request.session_hash is not None
     if request.session_hash in runtime_store:
         del runtime_store[request.session_hash]
+    manager.unload_session(request.session_hash)
 
 def get_runtime(request: gr.Request):
     """Get the runtime context for the current session."""
@@ -51,6 +53,7 @@ def get_runtime(request: gr.Request):
 
 def load_model(model_name: str, request: gr.Request, retain: bool = False):
     """Load a model into memory. If retain is False, unloads all other models except the one being loaded."""
+    assert request.session_hash is not None
     manager.load_model(model_name, request.session_hash, retain)
 
     loaded_models_list = gr.Textbox(
@@ -79,7 +82,8 @@ def get_model_response(history: list[dict], session: SessionContext, request: gr
         session.rebuild_history = False
     else:
         history_to_pass = [user_input_object]
-
+    
+    assert request.session_hash is not None
     for chunk in manager.get_model_response(history_to_pass, request.session_hash):
         if runtime.stop_event.is_set():
             break
@@ -112,6 +116,7 @@ def update_current_conversation(history, request: gr.Request):
 
 def load_new_conversation(session: SessionContext, request: gr.Request):
     """Load a new conversation in the UI."""
+    assert request.session_hash is not None
     runtime = get_runtime(request)
     manager.load_new_session(request.session_hash)
     session.rebuild_history = False
@@ -119,6 +124,7 @@ def load_new_conversation(session: SessionContext, request: gr.Request):
 
 def load_previous_conversation(index: int, session: SessionContext, request: gr.Request):
     """Load a previous conversation from the history in the UI."""
+    assert request.session_hash is not None
     runtime = get_runtime(request)
     manager.load_new_session(request.session_hash)
     session.rebuild_history = True

@@ -133,11 +133,15 @@ class FoundryManager:
     def unload_all_models(self, exceptions: list[str]|None = None) -> None:
         """Unload all models from memory, except those being used by active sessions and those specified in the exceptions list."""
 
+        unloaded_model_names = []
         for model_name in self.loaded_model_names:
             if exceptions and (model_name in exceptions or model_name in self._active_model_names.values()):
                 continue
             self.unload_model(model_name)
-            self.loaded_model_names.remove(model_name)
+            unloaded_model_names.append(model_name)
+        for model_name in unloaded_model_names:
+            if model_name in self.loaded_model_names:
+                self.loaded_model_names.remove(model_name)
 
     def _cleaned_history(self, history: list[dict]) -> list[dict[str, str]]:
         """Clean the conversation history by replacing the 'content' fields containing dictionaries with their 'text'
@@ -163,3 +167,10 @@ class FoundryManager:
         if session_hash not in self._active_models:
             raise ValueError("No model is currently loaded. Please load a model first.")
         self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
+
+    def unload_session(self, session_hash: str) -> None:
+        """Unload the chat session for the given session hash. Does not unload the model itself."""
+        if session_hash in self._sessions:
+            del self._sessions[session_hash]
+            del self._active_models[session_hash]
+            del self._active_model_names[session_hash]
