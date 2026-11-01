@@ -49,9 +49,9 @@ def get_runtime(request: gr.Request):
         initialize_runtime(request)
     return runtime_store[request.session_hash]
 
-def load_model(model_name: str, retain: bool = False):
+def load_model(model_name: str, request: gr.Request, retain: bool = False):
     """Load a model into memory. If retain is False, unloads all other models except the one being loaded."""
-    manager.load_model(model_name, retain)
+    manager.load_model(model_name, request.session_hash, retain)
 
     loaded_models_list = gr.Textbox(
         label="Loaded Models",
@@ -80,7 +80,7 @@ def get_model_response(history: list[dict], session: SessionContext, request: gr
     else:
         history_to_pass = [user_input_object]
 
-    for chunk in manager.get_model_response(history_to_pass):
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk
@@ -113,14 +113,14 @@ def update_current_conversation(history, request: gr.Request):
 def load_new_conversation(session: SessionContext, request: gr.Request):
     """Load a new conversation in the UI."""
     runtime = get_runtime(request)
-    manager.load_new_session()
+    manager.load_new_session(request.session_hash)
     session.rebuild_history = False
     return runtime.history_manager.load_new_conversation()
 
 def load_previous_conversation(index: int, session: SessionContext, request: gr.Request):
     """Load a previous conversation from the history in the UI."""
     runtime = get_runtime(request)
-    manager.load_new_session()
+    manager.load_new_session(request.session_hash)
     session.rebuild_history = True
     return runtime.history_manager.load_previous_conversation(index)
 
@@ -141,7 +141,11 @@ def main():
             interactive=True,
         )
 
-        loaded_models_list = load_model(default_model)
+        loaded_models_list = gr.Textbox(
+            label="Loaded Models",
+            value="",
+            interactive=False,
+        )
 
         with gr.Row():
             with gr.Column(scale=1, min_width=100):
@@ -250,6 +254,11 @@ def main():
             initialize_runtime,
             inputs=None,
             outputs=None,
+            queue=True,
+        ).then(
+            load_model,
+            inputs=[model_select, retain_checkbox],
+            outputs=[loaded_models_list],
             queue=True,
         ).then(
             update_conversation_history,

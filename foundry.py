@@ -24,8 +24,9 @@ role_map = {
 class FoundryManager:
     def __init__(self):
         self._current_model_name: str|None = None
-        self._model: IModel|None = None
-        self._session: ChatSession|None = None
+        self._active_models: dict[str, IModel] = {}
+        self._active_model_names: dict[str, str] = {}
+        self._sessions: dict[str, ChatSession] = {}
         self._manager: FoundryLocalManager = self._get_initialized_manager()
         self.loaded_model_names: list[str] = []
 
@@ -79,7 +80,7 @@ class FoundryManager:
 
         return model
 
-    def load_model(self, model_name: str, retain: bool = False) -> None:
+    def load_model(self, model_name: str, session_hash: str, retain: bool = False) -> None:
         """Load a model into memory. If retain is False, unloads all other models except the one being loaded.  """
 
         if not retain:
@@ -88,23 +89,24 @@ class FoundryManager:
         self._current_model_name = model_name
         if model_name not in self.loaded_model_names:
             self.loaded_model_names.append(model_name)
-        self._model = self.get_loaded_model(model_name)
-        self._session = ChatSession(self._model)
+        self._active_models[session_hash] = self.get_loaded_model(model_name)
+        self._active_model_names[session_hash] = model_name
+        self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
 
-    def get_model_response(self, history: list[dict]) -> Generator[str]:
+    def get_model_response(self, history: list[dict], session_hash: str) -> Generator[str]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
             ValueError: If no model is currently loaded.
         """
 
-        if self._session is None:
+        if self._sessions[session_hash] is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
         
         history = self._cleaned_history(history)
 
         # Stream the response token by token
-        self._session.set_streaming(True)
+        self._sessions[session_hash].set_streaming(True)
         with Request() as request:
             for message in history:
                 request.add_item(
@@ -114,7 +116,7 @@ class FoundryManager:
                     )
                 )
 
-            for item in self._session.process_streaming_request(request):
+            for item in self._sessions[session_hash].process_streaming_request(request):
                 if isinstance(item, TextItem):
                     yield item.text
 
@@ -129,10 +131,12 @@ class FoundryManager:
             print(f"Model '{model_name}' unloaded.")
 
     def unload_all_models(self, exceptions: list[str]|None = None) -> None:
-        """Unload all models from memory, except those specified in the exceptions list."""
+        """Unload all models from memory, except those being used by active sessions and those specified in the exceptions list."""
+
+        print(self._active_models.values())
 
         for model_name in self.loaded_model_names:
-            if exceptions and model_name in exceptions:
+            if exceptions and (model_name in exceptions or model_name in self._active_model_names.values()):
                 continue
             self.unload_model(model_name)
         self.loaded_model_names.clear()
@@ -156,8 +160,8 @@ class FoundryManager:
 
         return cleaned_history
 
-    def load_new_session(self) -> None:
+    def load_new_session(self, session_hash: str) -> None:
         """Create a new chat session for the currently loaded model. Raises an error if no model is loaded."""
-        if self._model is None:
+        if session_hash not in self._active_models:
             raise ValueError("No model is currently loaded. Please load a model first.")
-        self._session = ChatSession(self._model)
+        self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
