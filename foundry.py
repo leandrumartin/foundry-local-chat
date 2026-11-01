@@ -15,7 +15,7 @@ class FoundryManager:
     def __init__(self):
         self._current_model_name: str|None = None
         self._model: IModel|None = None
-        self.session: ChatSession|None = None
+        self._session: ChatSession|None = None
         self._manager: FoundryLocalManager = self._get_initialized_manager()
         self.loaded_model_names: list[str] = []
 
@@ -79,7 +79,7 @@ class FoundryManager:
         if model_name not in self.loaded_model_names:
             self.loaded_model_names.append(model_name)
         self._model = self.get_loaded_model(model_name)
-        self.session = ChatSession(self._model)
+        self._session = ChatSession(self._model)
 
     def get_model_response(self, history: list[dict]) -> Generator[str]:
         """Get a response from the currently loaded model based on user input and conversation history.
@@ -88,18 +88,18 @@ class FoundryManager:
             ValueError: If no model is currently loaded.
         """
 
-        if self.session is None:
+        if self._session is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
         
         history = self._cleaned_history(history)
 
         # Stream the response token by token
-        self.session.set_streaming(True)
+        self._session.set_streaming(True)
         with Request() as request:
             for message in history:
                 request.add_item(MessageItem.user(message["content"]))
 
-            for item in self.session.process_streaming_request(request):
+            for item in self._session.process_streaming_request(request):
                 if isinstance(item, TextItem):
                     yield item.text
 
@@ -145,4 +145,4 @@ class FoundryManager:
         """Create a new chat session for the currently loaded model. Raises an error if no model is loaded."""
         if self._model is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
-        self.session = ChatSession(self._model)
+        self._session = ChatSession(self._model)
