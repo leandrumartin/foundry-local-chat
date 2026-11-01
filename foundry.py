@@ -5,10 +5,20 @@ from foundry_local_sdk import (
     Configuration,
     FoundryLocalManager,
     MessageItem,
+    MessageRole,
     Request,
     TextItem,
 )
 from foundry_local_sdk.imodel import IModel
+
+role_map = {
+    "none": MessageRole.NONE,
+    "system": MessageRole.SYSTEM,
+    "user": MessageRole.USER,
+    "assistant": MessageRole.ASSISTANT,
+    "tool": MessageRole.TOOL,
+    "developer": MessageRole.DEVELOPER,
+}
 
 
 class FoundryManager:
@@ -97,7 +107,12 @@ class FoundryManager:
         self._session.set_streaming(True)
         with Request() as request:
             for message in history:
-                request.add_item(MessageItem.user(message["content"]))
+                request.add_item(
+                    MessageItem(
+                        role=role_map.get(message["role"], MessageRole.NONE),
+                        content=message["content"]
+                    )
+                )
 
             for item in self._session.process_streaming_request(request):
                 if isinstance(item, TextItem):
