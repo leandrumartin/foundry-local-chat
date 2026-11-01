@@ -95,7 +95,7 @@ class FoundryManager:
         self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
 
         # Ensure previous model for this session is unloaded if it was different from the current one and not being used by any other session
-        if previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
+        if not retain and previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
             self.unload_model(previous_model_name)
 
     def get_model_response(self, history: list[dict], session_hash: str) -> Generator[str]:
