@@ -133,13 +133,11 @@ class FoundryManager:
     def unload_all_models(self, exceptions: list[str]|None = None) -> None:
         """Unload all models from memory, except those being used by active sessions and those specified in the exceptions list."""
 
-        print(self._active_models.values())
-
         for model_name in self.loaded_model_names:
             if exceptions and (model_name in exceptions or model_name in self._active_model_names.values()):
                 continue
             self.unload_model(model_name)
-        self.loaded_model_names.clear()
+            self.loaded_model_names.remove(model_name)
 
     def _cleaned_history(self, history: list[dict]) -> list[dict[str, str]]:
         """Clean the conversation history by replacing the 'content' fields containing dictionaries with their 'text'
