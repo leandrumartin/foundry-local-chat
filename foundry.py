@@ -89,9 +89,14 @@ class FoundryManager:
         self._current_model_name = model_name
         if model_name not in self.loaded_model_names:
             self.loaded_model_names.append(model_name)
+        previous_model_name = self._active_model_names.get(session_hash)
         self._active_models[session_hash] = self.get_loaded_model(model_name)
         self._active_model_names[session_hash] = model_name
         self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
+
+        # Ensure previous model for this session is unloaded if it was different from the current one and not being used by any other session
+        if previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
+            self.unload_model(previous_model_name)
 
     def get_model_response(self, history: list[dict], session_hash: str) -> Generator[str]:
         """Get a response from the currently loaded model based on user input and conversation history.
@@ -135,7 +140,7 @@ class FoundryManager:
 
         unloaded_model_names = []
         for model_name in self.loaded_model_names:
-            if exceptions and (model_name in exceptions or model_name in self._active_model_names.values()):
+            if (exceptions is not None and model_name in exceptions) or model_name in self._active_model_names.values():
                 continue
             self.unload_model(model_name)
             unloaded_model_names.append(model_name)

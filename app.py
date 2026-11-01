@@ -51,9 +51,10 @@ def get_runtime(request: gr.Request):
         initialize_runtime(request)
     return runtime_store[request.session_hash]
 
-def load_model(model_name: str, request: gr.Request, retain: bool = False):
+def load_model(model_name: str, session: SessionContext, request: gr.Request, retain: bool = False):
     """Load a model into memory. If retain is False, unloads all other models except the one being loaded."""
     assert request.session_hash is not None
+    session.rebuild_history = False
     manager.load_model(model_name, request.session_hash, retain)
 
     loaded_models_list = gr.Textbox(
@@ -182,7 +183,7 @@ def main():
 
             model_select.change(
                 load_model,
-                inputs=[model_select, retain_checkbox],
+                inputs=[model_select, session_state, retain_checkbox],
                 outputs=[loaded_models_list]
             ).then(
                 lambda: "",
@@ -263,7 +264,7 @@ def main():
             queue=True,
         ).then(
             load_model,
-            inputs=[model_select, retain_checkbox],
+            inputs=[model_select, session_state, retain_checkbox],
             outputs=[loaded_models_list],
             queue=True,
         ).then(
