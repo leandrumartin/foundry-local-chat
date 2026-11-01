@@ -17,13 +17,12 @@ except FileNotFoundError:
 default_model = models[0]
 manager: FoundryManager = FoundryManager()
 
-rebuild_history = True  # Flag to indicate whether to rebuild the conversation history in the manager
-
 @dataclass
 class SessionContext:
     """A dataclass to hold serializable session context for the Gradio interface."""
     retain_loaded_models: bool = False
     pending_user_input: str = ""
+    rebuild_history: bool = True  # Flag to indicate whether to rebuild the conversation history in the manager
 
 
 @dataclass
@@ -65,8 +64,6 @@ def load_model(model_name: str, retain: bool = False):
 def get_model_response(history: list[dict], session: SessionContext, request: gr.Request):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
-    global rebuild_history
-
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
@@ -77,9 +74,9 @@ def get_model_response(history: list[dict], session: SessionContext, request: gr
 
     history.append({"role": "assistant", "content": ""})
 
-    if rebuild_history:
+    if session.rebuild_history:
         history_to_pass = history
-        rebuild_history = False
+        session.rebuild_history = False
     else:
         history_to_pass = [user_input_object]
 
@@ -113,18 +110,18 @@ def update_current_conversation(history, request: gr.Request):
     runtime = get_runtime(request)
     runtime.history_manager.update_current_conversation(history)
 
-def load_new_conversation(request: gr.Request):
+def load_new_conversation(session: SessionContext, request: gr.Request):
     """Load a new conversation in the UI."""
     runtime = get_runtime(request)
     manager.load_new_session()
+    session.rebuild_history = False
     return runtime.history_manager.load_new_conversation()
 
-def load_previous_conversation(index: int, request: gr.Request):
+def load_previous_conversation(index: int, session: SessionContext, request: gr.Request):
     """Load a previous conversation from the history in the UI."""
     runtime = get_runtime(request)
     manager.load_new_session()
-    global rebuild_history
-    rebuild_history = True
+    session.rebuild_history = True
     return runtime.history_manager.load_previous_conversation(index)
 
 def main():
@@ -221,7 +218,7 @@ def main():
                 queue=True,
             ).then(
                 load_new_conversation,
-                inputs = None,
+                inputs = [session_state],
                 outputs = [chatbot],
                 queue=True,
             ).then(
@@ -243,7 +240,7 @@ def main():
                 queue=True,
             ).then(
                 load_previous_conversation,
-                [chat_history_dataset],
+                [chat_history_dataset, session_state],
                 [chatbot],
                 queue=True,
                 show_progress="hidden",
@@ -261,7 +258,7 @@ def main():
             queue=False,
         ).then(
             load_new_conversation,
-            inputs=None,
+            inputs=[session_state],
             outputs=[chatbot],
             queue=False,
         )
