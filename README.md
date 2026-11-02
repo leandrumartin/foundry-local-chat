@@ -24,19 +24,11 @@ Simple Gradio-based chat UI for Microsoft Foundry Local models. The app lets you
         source .venv/bin/activate
         ```
 
-2. Install dependencies.
-    - On Windows:
+2. Install dependencies:
 
-        ```powershell
-        pip install -r requirements_windows.txt
-        ```
-
-        This installs the Windowss-specific version of the Foundry Local SDK, which integrates with the Windows ML platform.
-    - On macOS and Linux:
-
-        ```bash
-        pip install -r requirements.txt
-        ```
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 ## Run
 

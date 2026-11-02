@@ -17,12 +17,12 @@ except FileNotFoundError:
 default_model = models[0]
 manager: FoundryManager = FoundryManager()
 
-
 @dataclass
 class SessionContext:
     """A dataclass to hold serializable session context for the Gradio interface."""
     retain_loaded_models: bool = False
     pending_user_input: str = ""
+    rebuild_history: bool = True  # Flag to indicate whether to rebuild the conversation history in the manager
 
 
 @dataclass
@@ -40,8 +40,10 @@ def initialize_runtime(request: gr.Request):
 
 def cleanup_runtime(request: gr.Request):
     """Clean up the runtime context for the current session."""
+    assert request.session_hash is not None
     if request.session_hash in runtime_store:
         del runtime_store[request.session_hash]
+    manager.unload_session(request.session_hash)
 
 def get_runtime(request: gr.Request):
     """Get the runtime context for the current session."""
@@ -49,9 +51,11 @@ def get_runtime(request: gr.Request):
         initialize_runtime(request)
     return runtime_store[request.session_hash]
 
-def load_model(model_name: str, retain: bool = False):
+def load_model(model_name: str, session: SessionContext, request: gr.Request, retain: bool = False):
     """Load a model into memory. If retain is False, unloads all other models except the one being loaded."""
-    manager.load_model(model_name, retain)
+    assert request.session_hash is not None
+    session.rebuild_history = False
+    manager.load_model(model_name, request.session_hash, retain)
 
     loaded_models_list = gr.Textbox(
         label="Loaded Models",
@@ -61,18 +65,27 @@ def load_model(model_name: str, retain: bool = False):
 
     return loaded_models_list
 
-def get_model_response(history, session: SessionContext, request: gr.Request):
-    """Get a response from the currently loaded model based on transformed user input and conversation history.
+def get_model_response(history: list[dict], session: SessionContext, request: gr.Request):
+    """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
-    history.append({"role": "user", "content": session.pending_user_input})
+    user_input_object = {"role": "user", "content": session.pending_user_input}
+
+    history.append(user_input_object)
     yield history
 
     history.append({"role": "assistant", "content": ""})
 
-    for chunk in manager.get_model_response(history):
+    if session.rebuild_history:
+        history_to_pass = history
+        session.rebuild_history = False
+    else:
+        history_to_pass = [user_input_object]
+    
+    assert request.session_hash is not None
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk
@@ -102,14 +115,20 @@ def update_current_conversation(history, request: gr.Request):
     runtime = get_runtime(request)
     runtime.history_manager.update_current_conversation(history)
 
-def load_new_conversation(request: gr.Request):
+def load_new_conversation(session: SessionContext, request: gr.Request):
     """Load a new conversation in the UI."""
+    assert request.session_hash is not None
     runtime = get_runtime(request)
+    manager.load_new_session(request.session_hash)
+    session.rebuild_history = False
     return runtime.history_manager.load_new_conversation()
 
-def load_previous_conversation(index: int, request: gr.Request):
+def load_previous_conversation(index: int, session: SessionContext, request: gr.Request):
     """Load a previous conversation from the history in the UI."""
+    assert request.session_hash is not None
     runtime = get_runtime(request)
+    manager.load_new_session(request.session_hash)
+    session.rebuild_history = True
     return runtime.history_manager.load_previous_conversation(index)
 
 def main():
@@ -129,7 +148,11 @@ def main():
             interactive=True,
         )
 
-        loaded_models_list = load_model(default_model)
+        loaded_models_list = gr.Textbox(
+            label="Loaded Models",
+            value="",
+            interactive=False,
+        )
 
         with gr.Row():
             with gr.Column(scale=1, min_width=100):
@@ -160,7 +183,7 @@ def main():
 
             model_select.change(
                 load_model,
-                inputs=[model_select, retain_checkbox],
+                inputs=[model_select, session_state, retain_checkbox],
                 outputs=[loaded_models_list]
             ).then(
                 lambda: "",
@@ -206,7 +229,7 @@ def main():
                 queue=True,
             ).then(
                 load_new_conversation,
-                inputs = None,
+                inputs = [session_state],
                 outputs = [chatbot],
                 queue=True,
             ).then(
@@ -228,7 +251,7 @@ def main():
                 queue=True,
             ).then(
                 load_previous_conversation,
-                [chat_history_dataset],
+                [chat_history_dataset, session_state],
                 [chatbot],
                 queue=True,
                 show_progress="hidden",
@@ -240,13 +263,18 @@ def main():
             outputs=None,
             queue=True,
         ).then(
+            load_model,
+            inputs=[model_select, session_state, retain_checkbox],
+            outputs=[loaded_models_list],
+            queue=True,
+        ).then(
             update_conversation_history,
             inputs=None,
             outputs=[chat_history_dataset],
             queue=False,
         ).then(
             load_new_conversation,
-            inputs=None,
+            inputs=[session_state],
             outputs=[chatbot],
             queue=False,
         )
