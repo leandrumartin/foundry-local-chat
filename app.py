@@ -9,6 +9,14 @@ from chat_history import ChatHistory
 from foundry import FoundryManager
 from user_tools import load_tools
 
+from foundry_local_sdk import ToolChoice
+
+tool_choice_map = {
+    "auto": ToolChoice.AUTO,
+    "required": ToolChoice.REQUIRED,
+    "none": ToolChoice.NONE,
+}
+
 load_tools()
 available_tools: list = tool_registry.get_tool_schemas()
 
@@ -74,6 +82,8 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 def get_model_response(history: list[dict], session: SessionContext, available_tools: list[str]|list[dict], request: gr.Request, tool_choice: str|None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
+    mapped_tool_choice = tool_choice_map.get(tool_choice, ToolChoice.AUTO) if tool_choice else ToolChoice.AUTO
+
     try:
         if isinstance(available_tools, list) and all(isinstance(tool, str) for tool in available_tools):
             available_tools = [json.loads(tool) for tool in available_tools]
@@ -104,7 +114,7 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
     tool_calls = []
     
     assert request.session_hash is not None
-    for chunk in manager.get_model_response(history_to_pass, request.session_hash, available_tools = available_tools, tool_choice=tool_choice):
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash, available_tools = available_tools, tool_choice=mapped_tool_choice):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk[0]
@@ -141,7 +151,7 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
                 history.append({"role": "assistant", "content": f"Tool '{tool_name}' not found."})
 
         # Get a new response from the model after the tool calls
-        yield from get_model_response(history, session, available_tools, request, tool_choice="auto" if tool_choice == "required" else tool_choice) # "auto" overrides "required" so it's not stuck in an infinite loop of tool calls
+        yield from get_model_response(history, session, available_tools, request, tool_choice=ToolChoice.AUTO if tool_choice == ToolChoice.REQUIRED else tool_choice) # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
