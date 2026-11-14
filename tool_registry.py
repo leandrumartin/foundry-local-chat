@@ -8,7 +8,7 @@ class Tool:
     """A dataclass to represent a tool with its metadata and function."""
     name: str
     description: str
-    parameters: dict
+    parameters: str
     function: Callable[..., Any]
 
 _tools: dict[str, Tool] = {}
@@ -17,14 +17,14 @@ def register_tool(
     *,
     name: str,
     description: str,
-    parameters: dict,
+    parameters: str,
 ):
     """Decorator to register a function as a tool with its metadata.
     
     Args:
         name (str): The name of the tool.
         description (str): A brief description of the tool.
-        parameters (dict): A dictionary describing the parameters of the tool.
+        parameters (str): A JSON string describing the parameters of the tool.
     """
     def decorator(func):
         function_name: str = name or func.__name__
@@ -41,13 +41,10 @@ def get_tool_schemas() -> list[dict]:
     """Return a list of tool schemas for all registered tools."""
     return [
         {
-            "type": "function",
-            "function": {
-                "name": tool.name,
-                "description": tool.description,
-                "parameters": tool.parameters,
-                "strict": True,
-            }
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters,
+            "strict": True,
         }
         for tool in _tools.values()
     ]

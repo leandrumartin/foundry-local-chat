@@ -126,29 +126,28 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
     # If the model made tool calls, call the tools, append outputs to history, and get a new response from the model
     if len(tool_calls) > 0:
         tool_functions = tool_registry.get_tool_functions()
-        for tool_call in tool_calls:
-            tool_name = tool_call.function.name
-            tool_args = json.loads(tool_call.function.arguments)
-            if tool_args is None:
-                tool_args = {}
-            if tool_name in tool_functions:
-                print(f"\nCalling tool: {tool_name} with arguments: {tool_args}")
+        for call_id, function_name, arguments_json in tool_calls:
+            arguments = json.loads(arguments_json)
+            if arguments is None:
+                arguments = {}
+            if function_name in tool_functions:
+                print(f"\nCalling tool: {function_name} with arguments: {arguments}")
                 try:
-                    tool_output = tool_functions[tool_name](**tool_args)
+                    tool_output = tool_functions[function_name](**arguments)
                     print(f"Tool output: {tool_output}")
                     history.append(
                         {
                             "role": "tool",
-                            "tool_call_id": tool_call.id,
+                            "tool_call_id": call_id,
                             "content": json.dumps(tool_output),
                         }
                     )
                 except Exception as e:
-                    print(f"Error calling tool '{tool_name}': {e}")
-                    history.append({"role": "assistant", "content": f"Error calling tool '{tool_name}': {e}"})
+                    print(f"Error calling tool '{function_name}': {e}")
+                    history.append({"role": "assistant", "content": f"Error calling tool '{function_name}': {e}"})
             else:
-                print(f"Tool '{tool_name}' not found.")
-                history.append({"role": "assistant", "content": f"Tool '{tool_name}' not found."})
+                print(f"Tool '{function_name}' not found.")
+                history.append({"role": "assistant", "content": f"Tool '{function_name}' not found."})
 
         # Get a new response from the model after the tool calls
         yield from get_model_response(history, session, available_tools, request, tool_choice=ToolChoice.AUTO if tool_choice == ToolChoice.REQUIRED else tool_choice) # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
@@ -268,7 +267,7 @@ def main():
 
                 enabled_tools = gr.CheckboxGroup(
                     label="Enabled Tools",
-                    choices=[(tool_schema["function"]["name"],  json.dumps(tool_schema)) for tool_schema in tool_registry.get_tool_schemas()],
+                    choices=[(tool_schema["name"],  json.dumps(tool_schema)) for tool_schema in tool_registry.get_tool_schemas()],
                     interactive=True,
                 )
 
