@@ -200,15 +200,21 @@ def toggle_tool_usage(tool_schema: dict, use_tool: bool):
     else:
         available_tools.remove(tool_schema)
 
-def toggle_tool_support(model_name: str):
+def toggle_tool_support(model_name: str, request: gr.Request):
     """Enable or disable the options for choosing tools based on whether the current model supports tool calling."""
+    assert request.session_hash is not None
+
+    active_model = manager.get_active_model(request.session_hash)
+    if active_model is None:
+        return gr.CheckboxGroup(interactive=False, value=None), gr.Radio(interactive=False)
+    
     return (
         gr.CheckboxGroup(
-            interactive=manager.get_loaded_model(model_name).supports_tool_calling,
-            value = [] if manager.get_loaded_model(model_name).supports_tool_calling else None
+            interactive = active_model.supports_tool_calling,
+            value = [] if active_model.supports_tool_calling else None
         ),
         gr.Radio(
-            interactive=manager.get_loaded_model(model_name).supports_tool_calling
+            interactive = active_model.supports_tool_calling
         )
     )
 

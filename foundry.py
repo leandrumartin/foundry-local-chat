@@ -203,3 +203,7 @@ class FoundryManager:
             del self._sessions[session_hash]
             del self._active_models[session_hash]
             del self._active_model_names[session_hash]
+
+    def get_active_model(self, session_hash: str) -> IModel|None:
+        """Get the name of the currently active model for the given session hash. Returns None if no model is active."""
+        return self._active_models.get(session_hash)
