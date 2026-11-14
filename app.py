@@ -200,18 +200,17 @@ def toggle_tool_usage(tool_schema: dict, use_tool: bool):
     else:
         available_tools.remove(tool_schema)
 
-def toggle_tool_support():
+def toggle_tool_support(model_name: str):
     """Enable or disable the options for choosing tools based on whether the current model supports tool calling."""
-    if manager.model is not None:
-        return (
-            gr.CheckboxGroup(
-                interactive=manager.model.supports_tool_calling,
-                value = [] if manager.model.supports_tool_calling else None
-            ),
-            gr.Radio(
-                interactive=manager.model.supports_tool_calling
-            )
+    return (
+        gr.CheckboxGroup(
+            interactive=manager.get_loaded_model(model_name).supports_tool_calling,
+            value = [] if manager.get_loaded_model(model_name).supports_tool_calling else None
+        ),
+        gr.Radio(
+            interactive=manager.get_loaded_model(model_name).supports_tool_calling
         )
+    )
 
 def main():
     with gr.Blocks(title="Foundry Local Chat") as full_interface:
@@ -289,7 +288,7 @@ def main():
                 queue=False
             ).then(
                 toggle_tool_support,
-                inputs=None,
+                inputs=[model_select],
                 outputs=[enabled_tools, tool_choice],
                 queue=False
             )
