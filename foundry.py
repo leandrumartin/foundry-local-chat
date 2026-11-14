@@ -111,10 +111,16 @@ class FoundryManager:
         if self._sessions[session_hash] is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
 
-        if tool_choice:
-            self._sessions[session_hash].set_options(RequestOptions(tool_choice=tool_choice))
+        if len(available_tools) == 0:
+            tool_choice_setting = RequestOptions(tool_choice=ToolChoice.AUTO)
         else:
-            self._sessions[session_hash].set_options(RequestOptions(tool_choice=ToolChoice.AUTO))
+            if tool_choice:
+                tool_choice_setting = RequestOptions(tool_choice=tool_choice)
+            else:
+                tool_choice_setting = RequestOptions(tool_choice=ToolChoice.AUTO)        
+        
+        self._sessions[session_hash].set_options(tool_choice_setting)
+        
         
         history = self._cleaned_history(history)
 
