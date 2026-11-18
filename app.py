@@ -79,7 +79,7 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def get_model_response(history: list[dict], session: SessionContext, available_tools: list[str]|list[dict], request: gr.Request, tool_choice: str|None = None):
+def get_model_response(history: list[dict], session: SessionContext, available_tools: list[str]|list[dict], request: gr.Request, tool_choice: str|None = None, tool_result: dict|None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
     mapped_tool_choice = tool_choice_map.get(tool_choice, ToolChoice.AUTO) if tool_choice else ToolChoice.AUTO
@@ -118,7 +118,7 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
     tool_calls = []
     
     assert request.session_hash is not None
-    for chunk in manager.get_model_response(history_to_pass, request.session_hash, available_tools = available_tools, tool_choice=mapped_tool_choice):
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash, available_tools = available_tools, tool_choice=mapped_tool_choice, tool_result=tool_result):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk[0]
@@ -127,7 +127,8 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
             tool_calls.extend(chunk[1])
         yield history
 
-    # If the model made tool calls, call the tools, append outputs to history, and get a new response from the model
+    # If the model made tool calls, call the tools, create message items to pass to model and add to history, and get a new response from the model
+    new_tool_result = None
     if len(tool_calls) > 0:
         tool_functions = tool_registry.get_tool_functions()
         for call_id, function_name, arguments_json in tool_calls:
@@ -137,24 +138,25 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
             if function_name in tool_functions:
                 print(f"\nCalling tool: {function_name} with arguments: {arguments}")
                 try:
-                    tool_output = tool_functions[function_name](**arguments)
-                    print(f"Tool output: {tool_output}")
-                    history.append(
-                        {
-                            "role": "tool",
-                            "tool_call_id": call_id,
-                            "content": json.dumps(tool_output),
-                        }
-                    )
+                    new_tool_result_content = json.dumps(tool_functions[function_name](**arguments))
+                    print(f"Tool output: {new_tool_result_content}")
+                    new_tool_result =  {
+                        "role": "tool",
+                        "tool_call_id": call_id,
+                        "content": new_tool_result_content,
+                    }
+                    history.append(new_tool_result)
                 except Exception as e:
                     print(f"Error calling tool '{function_name}': {e}")
-                    history.append({"role": "assistant", "content": f"Error calling tool '{function_name}': {e}"})
+                    new_tool_result = {"role": "assistant", "content": f"Error calling tool '{function_name}': {e}"}
+                    history.append(new_tool_result)
             else:
                 print(f"Tool '{function_name}' not found.")
-                history.append({"role": "assistant", "content": f"Tool '{function_name}' not found."})
+                new_tool_result = {"role": "assistant", "content": f"Tool '{function_name}' not found."}
+                history.append(new_tool_result)
 
         # Get a new response from the model after the tool calls
-        yield from get_model_response(history, session, available_tools, request, tool_choice=ToolChoice.AUTO if tool_choice == ToolChoice.REQUIRED else tool_choice) # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
+        yield from get_model_response(history, session, available_tools, request, tool_choice=ToolChoice.AUTO if tool_choice == ToolChoice.REQUIRED else tool_choice, tool_result = new_tool_result) # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""

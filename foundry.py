@@ -10,7 +10,8 @@ from foundry_local_sdk import (
     TextItem,
     ToolCallItem,
     RequestOptions,
-    ToolChoice
+    ToolChoice,
+    ToolResultItem
 )
 from foundry_local_sdk.imodel import IModel
 
@@ -102,7 +103,7 @@ class FoundryManager:
         if not retain and previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
             self.unload_model(previous_model_name)
 
-    def get_model_response(self, history: list[dict], session_hash: str, available_tools, tool_choice: ToolChoice|None = None) -> Generator[tuple[str, list | None]]:
+    def get_model_response(self, history: list[dict], session_hash: str, available_tools, tool_choice: ToolChoice|None = None, tool_result: dict|None = None) -> Generator[tuple[str, list | None]]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -144,6 +145,14 @@ class FoundryManager:
                     MessageItem(
                         role=role_map.get(message["role"], MessageRole.NONE),
                         content=message["content"]
+                    )
+                )
+
+            if tool_result is not None:
+                request.add_item(
+                    ToolResultItem(
+                        call_id=tool_result["tool_call_id"],
+                        result=tool_result["content"]
                     )
                 )
 
