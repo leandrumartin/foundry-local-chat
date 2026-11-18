@@ -96,6 +96,7 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
+    user_input_object = None
     if session.pending_user_input != "":
         user_input_object = {"role": "user", "content": session.pending_user_input}
         history.append(user_input_object)
@@ -109,7 +110,10 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
         history_to_pass = history
         session.rebuild_history = False
     else:
-        history_to_pass = [user_input_object]
+        if user_input_object is not None:
+            history_to_pass = [user_input_object]
+        else:
+            history_to_pass = []
 
     tool_calls = []
     

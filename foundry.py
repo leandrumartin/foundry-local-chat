@@ -68,7 +68,8 @@ class FoundryManager:
         """
 
         model: IModel|None = self._manager.catalog.get_model(model_name)
-
+        if model is None:
+            model: IModel|None = self._manager.catalog.get_model_variant(model_name)
         if model is None:
             raise ValueError(f"Model '{model_name}' not found in the catalog.")
 
@@ -128,11 +129,14 @@ class FoundryManager:
         self._sessions[session_hash].set_streaming(True)
 
         for tool in available_tools:
-            self._sessions[session_hash].add_tool_definition(
-                tool["name"],
-                tool["description"],
-                tool["parameters"]
-            )
+            try:
+                self._sessions[session_hash].add_tool_definition(
+                    tool["name"],
+                    tool["description"],
+                    tool["parameters"]
+                )
+            except Exception as e:
+                print(f"Error adding tool definition for {tool['name']}: {e}")
 
         with Request() as request:
             for message in history:
@@ -160,6 +164,8 @@ class FoundryManager:
 
         if model_name in self.loaded_model_names:
             model = self._manager.catalog.get_model(model_name)
+            if model is None:
+                model = self._manager.catalog.get_model_variant(model_name)
             if model is not None:
                 model.unload()
             self.loaded_model_names.remove(model_name)
