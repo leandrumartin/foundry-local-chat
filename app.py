@@ -9,14 +9,6 @@ from chat_history import ChatHistory
 from foundry import FoundryManager
 from user_tools import load_tools
 
-from foundry_local_sdk import ToolChoice
-
-tool_choice_map = {
-    "auto": ToolChoice.AUTO,
-    "required": ToolChoice.REQUIRED,
-    "none": ToolChoice.NONE,
-}
-
 load_tools()
 available_tools: list = tool_registry.get_tool_schemas()
 
@@ -79,15 +71,13 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def get_model_response(history: list[dict], session: SessionContext, available_tools: list[str]|list[dict], request: gr.Request, tool_choice: str|None = None, tool_result: dict|None = None):
+def get_model_response(history: list[dict], session: SessionContext, available_tools: list[str] | list[dict],
+                       request: gr.Request, tool_result: dict | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
-    mapped_tool_choice = tool_choice_map.get(tool_choice, ToolChoice.AUTO) if tool_choice else ToolChoice.AUTO
-
     try:
         if isinstance(available_tools, list) and all(isinstance(tool, str) for tool in available_tools):
             available_tools = [json.loads(tool) for tool in available_tools]
-
     except json.JSONDecodeError:
         available_tools = []
 
@@ -118,7 +108,7 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
     tool_calls = []
     
     assert request.session_hash is not None
-    for chunk in manager.get_model_response(history_to_pass, request.session_hash, available_tools = available_tools, tool_choice=mapped_tool_choice, tool_result=tool_result):
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash, available_tools = available_tools, tool_result=tool_result):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk[0]
@@ -156,7 +146,8 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
                 history.append(new_tool_result)
 
         # Get a new response from the model after the tool calls
-        yield from get_model_response(history, session, available_tools, request, tool_choice=ToolChoice.AUTO if tool_choice == ToolChoice.REQUIRED else tool_choice, tool_result = new_tool_result) # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
+        yield from get_model_response(history, session, available_tools, request,
+                                      tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
@@ -223,6 +214,11 @@ def toggle_tool_support(model_name: str, request: gr.Request):
             interactive = active_model.supports_tool_calling
         )
     )
+
+def update_tool_choice(tool_choice: str, request: gr.Request):
+    """Update the tool choice setting for the current session."""
+    assert request.session_hash is not None
+    manager.update_tool_choice(request.session_hash, tool_choice)
 
 def main():
     with gr.Blocks(title="Foundry Local Chat") as full_interface:
@@ -312,7 +308,7 @@ def main():
                 queue=True,
             ).then(
                 get_model_response,
-                inputs=[chatbot, session_state, enabled_tools, tool_choice],
+                inputs=[chatbot, session_state, enabled_tools],
                 outputs=[chatbot],
                 queue=True,
             ).then(
@@ -368,6 +364,13 @@ def main():
                 [chatbot],
                 queue=True,
                 show_progress="hidden",
+            )
+
+            tool_choice.change(
+                update_tool_choice,
+                inputs=[tool_choice],
+                outputs=None,
+                queue=True,
             )
 
         full_interface.load(

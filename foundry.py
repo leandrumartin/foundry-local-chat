@@ -7,11 +7,11 @@ from foundry_local_sdk import (
     MessageItem,
     MessageRole,
     Request,
+    RequestOptions,
     TextItem,
     ToolCallItem,
-    RequestOptions,
     ToolChoice,
-    ToolResultItem
+    ToolResultItem,
 )
 from foundry_local_sdk.imodel import IModel
 
@@ -24,6 +24,11 @@ role_map = {
     "developer": MessageRole.DEVELOPER,
 }
 
+tool_choice_map = {
+    "auto": ToolChoice.AUTO,
+    "required": ToolChoice.REQUIRED,
+    "none": ToolChoice.NONE,
+}
 
 class FoundryManager:
     def __init__(self):
@@ -31,6 +36,7 @@ class FoundryManager:
         self._active_models: dict[str, IModel] = {}
         self._active_model_names: dict[str, str] = {}
         self._sessions: dict[str, ChatSession] = {}
+        self._session_settings: dict[str, dict] = {}
         self._manager: FoundryLocalManager = self._get_initialized_manager()
         self.loaded_model_names: list[str] = []
 
@@ -103,7 +109,8 @@ class FoundryManager:
         if not retain and previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
             self.unload_model(previous_model_name)
 
-    def get_model_response(self, history: list[dict], session_hash: str, available_tools, tool_choice: ToolChoice|None = None, tool_result: dict|None = None) -> Generator[tuple[str, list | None]]:
+    def get_model_response(self, history: list[dict], session_hash: str, available_tools,
+                           tool_result: dict | None = None) -> Generator[tuple[str, list | None]]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -115,13 +122,7 @@ class FoundryManager:
 
         if len(available_tools) == 0:
             tool_choice_setting = RequestOptions(tool_choice=ToolChoice.AUTO)
-        else:
-            if tool_choice:
-                tool_choice_setting = RequestOptions(tool_choice=tool_choice)
-            else:
-                tool_choice_setting = RequestOptions(tool_choice=ToolChoice.AUTO)        
-        
-        self._sessions[session_hash].set_options(tool_choice_setting)
+            self._sessions[session_hash].set_options(tool_choice_setting)
         
         
         history = self._cleaned_history(history)
@@ -149,12 +150,25 @@ class FoundryManager:
                 )
 
             if tool_result is not None:
-                request.add_item(
-                    ToolResultItem(
-                        call_id=tool_result["tool_call_id"],
-                        result=tool_result["content"]
+                try:
+                    request.add_item(
+                        ToolResultItem(
+                            call_id=tool_result["tool_call_id"],
+                            result=tool_result["content"]
+                        )
                     )
-                )
+                except KeyError:
+                    try:
+                        # Expected keys are missing in the tool_result dictionary. It might be formatted as a message
+                        #  instead, as in the case of an error. Try rendering it as a message instead.
+                        request.add_item(
+                            MessageItem(
+                            role=role_map.get(tool_result.get("role", "none"), MessageRole.NONE),
+                            content=tool_result.get("content", "")
+                            )
+                        )
+                    except KeyError as e:
+                        raise ValueError(f"Invalid tool_result format: {tool_result}. Missing key: {e}")
 
             text_parts = []
             tool_calls = []
@@ -167,6 +181,9 @@ class FoundryManager:
                         tool_calls.append((part.call_id, part.name, part.arguments))
 
             yield "".join(text_parts), tool_calls
+
+        # Set tool choice back to user setting
+        self._sessions[session_hash].set_options(RequestOptions(tool_choice=self._session_settings.get(session_hash, {}).get("tool_choice", ToolChoice.AUTO)))
 
     def unload_model(self, model_name: str) -> None:
         """Unload a model from memory. If the model is not loaded, does nothing."""
@@ -228,3 +245,10 @@ class FoundryManager:
     def get_active_model(self, session_hash: str) -> IModel|None:
         """Get the name of the currently active model for the given session hash. Returns None if no model is active."""
         return self._active_models.get(session_hash)
+
+    def update_tool_choice(self, session_hash: str, tool_choice: str) -> None:
+        """Update the tool choice setting for the given session hash."""
+        mapped_tool_choice = tool_choice_map.get(tool_choice, ToolChoice.AUTO)
+        self._session_settings[session_hash] = {"tool_choice": mapped_tool_choice}
+        if session_hash in self._sessions:
+            self._sessions[session_hash].set_options(RequestOptions(tool_choice=mapped_tool_choice))
