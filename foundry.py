@@ -109,8 +109,7 @@ class FoundryManager:
         if not retain and previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
             self.unload_model(previous_model_name)
 
-    def get_model_response(self, history: list[dict], session_hash: str, available_tools,
-                           tool_result: dict | None = None) -> Generator[tuple[str, list | None]]:
+    def get_model_response(self, history: list[dict], session_hash: str, tool_result: dict | None = None) -> Generator[tuple[str, list | None]]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -120,25 +119,14 @@ class FoundryManager:
         if self._sessions[session_hash] is None:
             raise ValueError("No model is currently loaded. Please load a model first.")
 
-        if len(available_tools) == 0:
-            tool_choice_setting = RequestOptions(tool_choice=ToolChoice.AUTO)
-            self._sessions[session_hash].set_options(tool_choice_setting)
-        
-        
+        if session_hash in self._session_settings and "available_tools" in self._session_settings[session_hash] and len(self._session_settings[session_hash]["available_tools"]) == 0:
+                tool_choice_setting = RequestOptions(tool_choice=ToolChoice.AUTO)
+                self._sessions[session_hash].set_options(tool_choice_setting)
+
         history = self._cleaned_history(history)
 
         # Stream the response token by token
         self._sessions[session_hash].set_streaming(True)
-
-        for tool in available_tools:
-            try:
-                self._sessions[session_hash].add_tool_definition(
-                    tool["name"],
-                    tool["description"],
-                    tool["parameters"]
-                )
-            except Exception as e:
-                print(f"Error adding tool definition for {tool['name']}: {e}")
 
         with Request() as request:
             for message in history:
@@ -252,3 +240,39 @@ class FoundryManager:
         self._session_settings[session_hash] = {"tool_choice": mapped_tool_choice}
         if session_hash in self._sessions:
             self._sessions[session_hash].set_options(RequestOptions(tool_choice=mapped_tool_choice))
+
+    def update_available_tools(self, session_hash: str, available_tools: list[dict]) -> None:
+        """Update the available tools for the given session hash."""
+        if session_hash in self._sessions:
+            if session_hash in self._session_settings:
+                if "available_tools" in self._session_settings[session_hash]:
+                    for tool in self._session_settings[session_hash]["available_tools"]:
+                        if tool["name"] not in [t["name"] for t in available_tools]:
+                            # Remove any tools previously available that are no longer in the new list of available tools
+                            try:
+                                self._sessions[session_hash].remove_tool_definition(tool["name"])
+                            except Exception as e:
+                                print(f"Error removing tool definition for {tool['name']}: {e}")
+                for tool in available_tools:
+                    # Add newly available tools
+                    try:
+                        self._sessions[session_hash].add_tool_definition(
+                            tool["name"],
+                            tool["description"],
+                            tool["parameters"]
+                        )
+                    except Exception as e:
+                        print(f"Error adding tool definition for {tool['name']}: {e}")
+            else:
+                # If no previous session settings exist, just add the new tools
+                for tool in available_tools:
+                    try:
+                        self._sessions[session_hash].add_tool_definition(
+                            tool["name"],
+                            tool["description"],
+                            tool["parameters"]
+                        )
+                    except Exception as e:
+                        print(f"Error adding tool definition for {tool['name']}: {e}")
+
+            self._session_settings[session_hash]["available_tools"] = available_tools

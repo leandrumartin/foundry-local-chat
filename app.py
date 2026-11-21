@@ -71,18 +71,9 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def get_model_response(history: list[dict], session: SessionContext, available_tools: list[str] | list[dict],
-                       request: gr.Request, tool_result: dict | None = None):
+def get_model_response(history: list[dict], session: SessionContext, request: gr.Request, tool_result: dict | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
-    try:
-        if isinstance(available_tools, list) and all(isinstance(tool, str) for tool in available_tools):
-            available_tools = [json.loads(tool) for tool in available_tools]
-    except json.JSONDecodeError:
-        available_tools = []
-
-    print(f"available_tools: {available_tools}")
-
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
@@ -108,7 +99,7 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
     tool_calls = []
     
     assert request.session_hash is not None
-    for chunk in manager.get_model_response(history_to_pass, request.session_hash, available_tools = available_tools, tool_result=tool_result):
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_result=tool_result):
         if runtime.stop_event.is_set():
             break
         history[-1]["content"] += chunk[0]
@@ -146,8 +137,7 @@ def get_model_response(history: list[dict], session: SessionContext, available_t
                 history.append(new_tool_result)
 
         # Get a new response from the model after the tool calls
-        yield from get_model_response(history, session, available_tools, request,
-                                      tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
+        yield from get_model_response(history, session, request, tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
@@ -220,6 +210,11 @@ def update_tool_choice(tool_choice: str, request: gr.Request):
     assert request.session_hash is not None
     manager.update_tool_choice(request.session_hash, tool_choice)
 
+def update_available_tools(available_tools: list[str], request: gr.Request):
+    """Update the available tools for the current session."""
+    assert request.session_hash is not None
+    manager.update_available_tools(request.session_hash, [json.loads(tool) for tool in available_tools])
+
 def main():
     with gr.Blocks(title="Foundry Local Chat") as full_interface:
         session_state = gr.State(SessionContext())
@@ -274,7 +269,7 @@ def main():
 
                 enabled_tools = gr.CheckboxGroup(
                     label="Enabled Tools",
-                    choices=[(tool_schema["name"],  json.dumps(tool_schema)) for tool_schema in tool_registry.get_tool_schemas()],
+                    choices=[(tool_schema["name"], json.dumps(tool_schema)) for tool_schema in tool_registry.get_tool_schemas()],
                     interactive=True,
                 )
 
@@ -308,7 +303,7 @@ def main():
                 queue=True,
             ).then(
                 get_model_response,
-                inputs=[chatbot, session_state, enabled_tools],
+                inputs=[chatbot, session_state],
                 outputs=[chatbot],
                 queue=True,
             ).then(
@@ -369,6 +364,13 @@ def main():
             tool_choice.change(
                 update_tool_choice,
                 inputs=[tool_choice],
+                outputs=None,
+                queue=True,
+            )
+
+            enabled_tools.change(
+                update_available_tools,
+                inputs=[enabled_tools],
                 outputs=None,
                 queue=True,
             )
