@@ -222,6 +222,8 @@ class FoundryManager:
         if session_hash not in self._active_models:
             raise ValueError("No model is currently loaded. Please load a model first.")
         self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
+        self.update_tool_choice(session_hash, self._session_settings.get(session_hash, {}).get("tool_choice", ToolChoice.AUTO))
+        self.update_available_tools(session_hash, self._session_settings.get(session_hash, {}).get("available_tools", []))
 
     def unload_session(self, session_hash: str) -> None:
         """Unload the chat session for the given session hash. Does not unload the model itself."""
@@ -234,10 +236,18 @@ class FoundryManager:
         """Get the name of the currently active model for the given session hash. Returns None if no model is active."""
         return self._active_models.get(session_hash)
 
-    def update_tool_choice(self, session_hash: str, tool_choice: str) -> None:
+    def update_tool_choice(self, session_hash: str, tool_choice: str | ToolChoice) -> None:
         """Update the tool choice setting for the given session hash."""
-        mapped_tool_choice = tool_choice_map.get(tool_choice, ToolChoice.AUTO)
-        self._session_settings[session_hash] = {"tool_choice": mapped_tool_choice}
+        if isinstance(tool_choice, ToolChoice):
+            mapped_tool_choice = tool_choice
+        else:
+            mapped_tool_choice = tool_choice_map.get(tool_choice, ToolChoice.AUTO)
+
+        if session_hash in self._session_settings:
+            self._session_settings[session_hash]["tool_choice"] = mapped_tool_choice
+        else:
+            self._session_settings[session_hash] = {"tool_choice": mapped_tool_choice}
+
         if session_hash in self._sessions:
             self._sessions[session_hash].set_options(RequestOptions(tool_choice=mapped_tool_choice))
 
