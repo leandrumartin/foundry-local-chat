@@ -197,7 +197,7 @@ def toggle_tool_usage(tool_schema: dict, use_tool: bool):
     else:
         available_tools.remove(tool_schema)
 
-def toggle_tool_support(model_name: str, request: gr.Request):
+def toggle_tool_support(request: gr.Request):
     """Enable or disable the options for choosing tools based on whether the current model supports tool calling."""
     assert request.session_hash is not None
 
@@ -296,7 +296,7 @@ def main():
                 queue=False
             ).then(
                 toggle_tool_support,
-                inputs=[model_select],
+                inputs=None,
                 outputs=[enabled_tools, tool_choice],
                 queue=False
             )
