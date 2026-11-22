@@ -71,7 +71,7 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def get_model_response(history: list[dict], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_result: dict | None = None):
+def get_model_response(history: list[dict], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_results: list[dict] | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
     runtime = get_runtime(request)
@@ -99,7 +99,7 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
     tool_calls = []
     
     assert request.session_hash is not None
-    for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_result=tool_result):
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_results=tool_results):
         if runtime.stop_event.is_set():
             break
         if chunk["type"] == "text":
@@ -110,54 +110,54 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
         yield history
 
     # If the model made tool calls, call the tools, create message items to pass to model and add to history, and get a new response from the model
-    new_tool_result = None
+    new_tool_results = []
     if len(tool_calls) > 0:
         tool_functions = tool_registry.get_tool_functions()
         for call_id, function_name, arguments_json in tool_calls:
             try:
                 arguments = json.loads(arguments_json)
+                if arguments is None:
+                    arguments = {}
+                if function_name in [json.loads(t)["name"] for t in enabled_tools] and function_name in tool_functions:
+                    print(f"\nCalling tool: {function_name} with arguments: {arguments}")
+                    try:
+                        new_tool_result_content = json.dumps(tool_functions[function_name](**arguments))
+                        print(f"Tool output: {new_tool_result_content}")
+                        result = {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": new_tool_result_content,
+                        }
+                        new_tool_results.append(result)
+                    except Exception as e:
+                        print(f"Error calling tool '{function_name}': {e}")
+                        result = {
+                            "role": "assistant",
+                            "tool_call_id": call_id,
+                            "content": f"Error calling tool '{function_name}': {e}"
+                        }
+                        new_tool_results.append(result)
+                else:
+                    print(f"Tool '{function_name}' not found.")
+                    result = {
+                        "role": "assistant",
+                        "tool_call_id": call_id,
+                        "content": f"Tool '{function_name}' not found."
+                    }
+                    new_tool_results.append(result)
             except json.JSONDecodeError as e:
                 print(f"Error decoding arguments for tool '{function_name}': {e}")
-                new_tool_result = {
+                result = {
                     "role": "assistant",
                     "tool_call_id": call_id,
                     "content": f"Error decoding arguments for tool '{function_name}': {e}"
                 }
-                history.append(new_tool_result)
-                continue
-            if arguments is None:
-                arguments = {}
-            if function_name in [json.loads(t)["name"] for t in enabled_tools] and function_name in tool_functions:
-                print(f"\nCalling tool: {function_name} with arguments: {arguments}")
-                try:
-                    new_tool_result_content = json.dumps(tool_functions[function_name](**arguments))
-                    print(f"Tool output: {new_tool_result_content}")
-                    new_tool_result =  {
-                        "role": "tool",
-                        "tool_call_id": call_id,
-                        "content": new_tool_result_content,
-                    }
-                    history.append(new_tool_result)
-                except Exception as e:
-                    print(f"Error calling tool '{function_name}': {e}")
-                    new_tool_result = {
-                        "role": "assistant",
-                        "tool_call_id": call_id,
-                        "content": f"Error calling tool '{function_name}': {e}"
-                    }
-                    history.append(new_tool_result)
-            else:
-                print(f"Tool '{function_name}' not found.")
-                new_tool_result = {
-                    "role": "assistant",
-                    "tool_call_id": call_id,
-                    "content": f"Tool '{function_name}' not found."
-                }
-                history.append(new_tool_result)
+                new_tool_results.append(result)
+            history.append(result)
 
         # Get a new response from the model after the tool calls
         if not runtime.stop_event.is_set():
-            yield from get_model_response(history, session, enabled_tools, request, tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
+            yield from get_model_response(history, session, enabled_tools, request, tool_results=new_tool_results)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""

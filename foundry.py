@@ -110,7 +110,7 @@ class FoundryManager:
         if not retain and previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
             self.unload_model(previous_model_name)
 
-    def get_model_response(self, history: list[dict], session_hash: str, tool_result: dict | None = None) -> Generator[dict]:
+    def get_model_response(self, history: list[dict], session_hash: str, tool_results: list[dict] | None = None) -> Generator[dict]:
         """Get a response from the currently loaded model based on user input and conversation history.
         
         Raises:
@@ -143,26 +143,27 @@ class FoundryManager:
                     )
                 )
 
-            if tool_result is not None:
-                try:
-                    request.add_item(
-                        ToolResultItem(
-                            call_id=tool_result["tool_call_id"],
-                            result=tool_result["content"]
-                        )
-                    )
-                except KeyError:
+            if tool_results is not None:
+                for tool_result in tool_results:
                     try:
-                        # Expected keys are missing in the tool_result dictionary. It might be formatted as a message.
-                        #  Try rendering it as a message instead.
                         request.add_item(
-                            MessageItem(
-                            role=role_map.get(tool_result.get("role", "none"), MessageRole.NONE),
-                            content=tool_result.get("content", "")
+                            ToolResultItem(
+                                call_id=tool_result["tool_call_id"],
+                                result=tool_result["content"]
                             )
                         )
-                    except KeyError as e:
-                        raise ValueError(f"Invalid tool_result format: {tool_result}. Missing key: {e}")
+                    except KeyError:
+                        try:
+                            # Expected keys are missing in the tool_result dictionary. It might be formatted as a message.
+                            #  Try rendering it as a message instead.
+                            request.add_item(
+                                MessageItem(
+                                role=role_map.get(tool_result.get("role", "none"), MessageRole.NONE),
+                                content=tool_result.get("content", "")
+                                )
+                            )
+                        except KeyError as e:
+                            raise ValueError(f"Invalid tool_result format: {tool_result}. Missing key: {e}")
 
             tool_calls = []
             for item in self._sessions[session_hash].process_streaming_request(request):
