@@ -120,8 +120,7 @@ class FoundryManager:
             raise ValueError("No model is currently loaded. Please load a model first.")
 
         if session_hash in self._session_settings and "available_tools" in self._session_settings[session_hash] and len(self._session_settings[session_hash]["available_tools"]) == 0:
-                tool_choice_setting = RequestOptions(tool_choice=ToolChoice.AUTO)
-                self._sessions[session_hash].set_options(tool_choice_setting)
+            self._sessions[session_hash].set_options(RequestOptions(tool_choice=ToolChoice.AUTO))
 
         history = self._cleaned_history(history)
 
@@ -168,10 +167,17 @@ class FoundryManager:
                     elif isinstance(part, ToolCallItem):
                         tool_calls.append((part.call_id, part.name, part.arguments))
 
+            # If the tool choice is set to REQUIRED, temporarily set it to AUTO before yielding. This allows the models
+            #  to a response on the next go-around, once it has received the tool result, without requiring a tool call.
+            #  This prevents the model from being stuck in an infinite loop of tool calls.
+            if self._session_settings[session_hash]["tool_choice"] == ToolChoice.REQUIRED:
+                self._sessions[session_hash].set_options(RequestOptions(tool_choice=ToolChoice.AUTO))
+
             yield "".join(text_parts), tool_calls
 
-        # Set tool choice back to user setting
-        self._sessions[session_hash].set_options(RequestOptions(tool_choice=self._session_settings.get(session_hash, {}).get("tool_choice", ToolChoice.AUTO)))
+        # If there were no tool calls, this function won't be called again for this response. Set tool choice back to user setting.
+        if len(tool_calls) == 0:
+            self._sessions[session_hash].set_options(RequestOptions(tool_choice=self._session_settings.get(session_hash, {}).get("tool_choice", ToolChoice.AUTO)))
 
     def unload_model(self, model_name: str) -> None:
         """Unload a model from memory. If the model is not loaded, does nothing."""

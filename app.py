@@ -129,11 +129,19 @@ def get_model_response(history: list[dict], session: SessionContext, request: gr
                     history.append(new_tool_result)
                 except Exception as e:
                     print(f"Error calling tool '{function_name}': {e}")
-                    new_tool_result = {"role": "assistant", "content": f"Error calling tool '{function_name}': {e}"}
+                    new_tool_result = {
+                        "role": "assistant",
+                        "tool_call_id": call_id,
+                        "content": f"Error calling tool '{function_name}': {e}"
+                    }
                     history.append(new_tool_result)
             else:
                 print(f"Tool '{function_name}' not found.")
-                new_tool_result = {"role": "assistant", "content": f"Tool '{function_name}' not found."}
+                new_tool_result = {
+                    "role": "assistant",
+                    "tool_call_id": call_id,
+                    "content": f"Tool '{function_name}' not found."
+                }
                 history.append(new_tool_result)
 
         # Get a new response from the model after the tool calls
