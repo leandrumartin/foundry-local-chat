@@ -71,7 +71,7 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def get_model_response(history: list[dict], session: SessionContext, request: gr.Request, tool_result: dict | None = None):
+def get_model_response(history: list[dict], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_result: dict | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
     runtime = get_runtime(request)
@@ -113,10 +113,20 @@ def get_model_response(history: list[dict], session: SessionContext, request: gr
     if len(tool_calls) > 0:
         tool_functions = tool_registry.get_tool_functions()
         for call_id, function_name, arguments_json in tool_calls:
-            arguments = json.loads(arguments_json)
+            try:
+                arguments = json.loads(arguments_json)
+            except json.JSONDecodeError as e:
+                print(f"Error decoding arguments for tool '{function_name}': {e}")
+                new_tool_result = {
+                    "role": "assistant",
+                    "tool_call_id": call_id,
+                    "content": f"Error decoding arguments for tool '{function_name}': {e}"
+                }
+                history.append(new_tool_result)
+                continue
             if arguments is None:
                 arguments = {}
-            if function_name in tool_functions:
+            if function_name in [json.loads(t)["name"] for t in enabled_tools] and function_name in tool_functions:
                 print(f"\nCalling tool: {function_name} with arguments: {arguments}")
                 try:
                     new_tool_result_content = json.dumps(tool_functions[function_name](**arguments))
@@ -145,7 +155,7 @@ def get_model_response(history: list[dict], session: SessionContext, request: gr
                 history.append(new_tool_result)
 
         # Get a new response from the model after the tool calls
-        yield from get_model_response(history, session, request, tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
+        yield from get_model_response(history, session, enabled_tools, request, tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
@@ -311,7 +321,7 @@ def main():
                 queue=True,
             ).then(
                 get_model_response,
-                inputs=[chatbot, session_state],
+                inputs=[chatbot, session_state, enabled_tools],
                 outputs=[chatbot],
                 queue=True,
             ).then(
