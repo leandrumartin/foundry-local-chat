@@ -146,8 +146,8 @@ class FoundryManager:
                     )
                 except KeyError:
                     try:
-                        # Expected keys are missing in the tool_result dictionary. It might be formatted as a message
-                        #  instead, as in the case of an error. Try rendering it as a message instead.
+                        # Expected keys are missing in the tool_result dictionary. It might be formatted as a message.
+                        #  Try rendering it as a message instead.
                         request.add_item(
                             MessageItem(
                             role=role_map.get(tool_result.get("role", "none"), MessageRole.NONE),
