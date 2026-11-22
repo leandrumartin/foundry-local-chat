@@ -405,6 +405,11 @@ def main():
             outputs=[loaded_models_list],
             queue=True,
         ).then(
+            toggle_tool_support,
+            inputs=None,
+            outputs=[enabled_tools, tool_choice],
+            queue=False
+        ).then(
             update_conversation_history,
             inputs=None,
             outputs=[chat_history_dataset],
