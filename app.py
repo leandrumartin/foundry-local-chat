@@ -102,10 +102,11 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
     for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_result=tool_result):
         if runtime.stop_event.is_set():
             break
-        history[-1]["content"] += chunk[0]
-        print(chunk[0], end="", flush=True)
-        if chunk[1]:
-            tool_calls.extend(chunk[1])
+        if chunk["type"] == "text":
+            history[-1]["content"] += chunk["content"]
+            print(chunk["content"], end="", flush=True)
+        elif chunk["type"] == "tool_call_list":
+            tool_calls = chunk["content"]
         yield history
 
     # If the model made tool calls, call the tools, create message items to pass to model and add to history, and get a new response from the model
