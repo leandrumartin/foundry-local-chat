@@ -104,6 +104,7 @@ class FoundryManager:
         self._active_models[session_hash] = self.get_loaded_model(model_name)
         self._active_model_names[session_hash] = model_name
         self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
+        self.restore_settings(session_hash)
 
         # Ensure previous model for this session is unloaded if it was different from the current one and not being used by any other session
         if not retain and previous_model_name and previous_model_name != model_name and previous_model_name not in self._active_model_names.values():
@@ -228,8 +229,14 @@ class FoundryManager:
         if session_hash not in self._active_models:
             raise ValueError("No model is currently loaded. Please load a model first.")
         self._sessions[session_hash] = ChatSession(self._active_models[session_hash])
-        self.update_tool_choice(session_hash, self._session_settings.get(session_hash, {}).get("tool_choice", ToolChoice.AUTO))
-        self.update_available_tools(session_hash, self._session_settings.get(session_hash, {}).get("available_tools", []))
+        self.restore_settings(session_hash)
+
+    def restore_settings(self, session_hash: str):
+        """Restore available settings for the given session hash. If no settings exist, defaults are used."""
+        self.update_tool_choice(session_hash,
+                                self._session_settings.get(session_hash, {}).get("tool_choice", ToolChoice.AUTO))
+        self.update_available_tools(session_hash,
+                                    self._session_settings.get(session_hash, {}).get("available_tools", []))
 
     def unload_session(self, session_hash: str) -> None:
         """Unload the chat session for the given session hash. Does not unload the model itself."""
