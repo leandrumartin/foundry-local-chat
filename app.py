@@ -155,7 +155,8 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
                 history.append(new_tool_result)
 
         # Get a new response from the model after the tool calls
-        yield from get_model_response(history, session, enabled_tools, request, tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
+        if not runtime.stop_event.is_set():
+            yield from get_model_response(history, session, enabled_tools, request, tool_result=new_tool_result)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
