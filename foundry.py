@@ -180,9 +180,6 @@ class FoundryManager:
                     self._sessions[session_hash].set_options(RequestOptions(tool_choice=ToolChoice.AUTO))
 
                 yield {"type": "tool_call_list", "content": tool_calls}
-            else:
-                # If there were no tool calls, this function won't be called again for this response. Set tool choice back to user setting.
-                self._sessions[session_hash].set_options(RequestOptions(tool_choice=self._session_settings.get(session_hash, {}).get("tool_choice", ToolChoice.AUTO)))
 
     def unload_model(self, model_name: str) -> None:
         """Unload a model from memory. If the model is not loaded, does nothing."""

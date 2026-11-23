@@ -29,6 +29,7 @@ class SessionContext:
     retain_loaded_models: bool = False
     pending_user_input: str = ""
     rebuild_history: bool = True  # Flag to indicate whether to rebuild the conversation history in the manager
+    new_request: bool = True  # Flag to indicate whether this is a new model request
 
 
 @dataclass
@@ -77,6 +78,14 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
+    assert request.session_hash is not None
+
+    # Restore session settings if this function is being called for the first time in a new request. The manager may
+    #  override the user's tool_choice setting, so this restores the setting for each new request.
+    if session.new_request:
+        manager.restore_settings(request.session_hash)
+        session.new_request = False
+
     user_input_object = None
     if session.pending_user_input != "":
         user_input_object = {"role": "user", "content": session.pending_user_input}
@@ -98,7 +107,6 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
 
     tool_calls = []
     
-    assert request.session_hash is not None
     for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_results=tool_results):
         if runtime.stop_event.is_set():
             break
@@ -237,6 +245,10 @@ def update_available_tools(available_tools: list[str], request: gr.Request):
     assert request.session_hash is not None
     manager.update_available_tools(request.session_hash, [json.loads(tool) for tool in available_tools])
 
+def enable_new_request_flag(session: SessionContext):
+    """Set the new_request flag in the session context to True."""
+    session.new_request = True
+
 def main():
     with gr.Blocks(title="Foundry Local Chat") as full_interface:
         session_state = gr.State(SessionContext())
@@ -322,6 +334,11 @@ def main():
                 store_user_input_and_clear,
                 inputs=[chat_input, session_state],
                 outputs=[chat_input, session_state],
+                queue=True,
+            ).then(
+                enable_new_request_flag,
+                inputs=[session_state],
+                outputs=None,
                 queue=True,
             ).then(
                 get_model_response,
