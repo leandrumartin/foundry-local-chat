@@ -31,7 +31,7 @@ def register_tool(
         _tools[function_name] = Tool(
             name = function_name,
             description = description or func.__doc__ or "",
-            parameters = parameters or func.__annotations__,
+            parameters = parameters,
             function = func
         )
         return func
