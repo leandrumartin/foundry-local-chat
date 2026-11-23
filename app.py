@@ -114,6 +114,8 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
     if len(tool_calls) > 0:
         tool_functions = tool_registry.get_tool_functions()
         for call_id, function_name, arguments_json in tool_calls:
+            if runtime.stop_event.is_set():
+                break
             try:
                 arguments = json.loads(arguments_json)
                 if arguments is None:
