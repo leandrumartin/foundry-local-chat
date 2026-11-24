@@ -123,8 +123,8 @@ def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: 
             history.append(gr.ChatMessage(
                 role="assistant",
                 content="\n".join(
-                    f"Called tool {function_name} with arguments {arguments_json}"
-                    for _, function_name, arguments_json in tool_calls
+                    f"Called tool {function_name} with arguments {arguments_json} (call ID: {call_id})"
+                    for call_id, function_name, arguments_json in tool_calls
                 ),
                 metadata={"title": "Tool calls"}
             ))
