@@ -72,7 +72,7 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def get_model_response(history: list[dict], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_results: list[dict] | None = None):
+def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_results: list[dict] | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
     runtime = get_runtime(request)
@@ -106,15 +106,30 @@ def get_model_response(history: list[dict], session: SessionContext, enabled_too
             history_to_pass = []
 
     tool_calls = []
-    
+    last_message_was_tool_call = False
     for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_results=tool_results):
         if runtime.stop_event.is_set():
             break
         if chunk["type"] == "text":
-            history[-1]["content"] += chunk["content"]
+            # Check whether the last message in history is regular assistant text or a tool call. If it's a tool call, we need to create a new message for the regular assistant text.
+            if last_message_was_tool_call:
+                history.append({"role": "assistant", "content": chunk["content"]})
+            else:
+                history[-1]["content"] += chunk["content"]
             print(chunk["content"], end="", flush=True)
+            last_message_was_tool_call = False
         elif chunk["type"] == "tool_call_list":
             tool_calls = chunk["content"]
+            history.append(gr.ChatMessage(
+                role="assistant",
+                content="\n".join(
+                    f"Called tool {function_name} with arguments {arguments_json}"
+                    for _, function_name, arguments_json in tool_calls
+                ),
+                metadata={"title": "Tool calls"}
+            ))
+            print(f"\nTool calls: {tool_calls}", end="", flush=True)
+            last_message_was_tool_call = True
         yield history
 
     # If the model made tool calls, call the tools, create message items to pass to model and add to history, and get a new response from the model
