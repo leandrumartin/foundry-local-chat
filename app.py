@@ -1,10 +1,16 @@
+import json
 import threading
 from dataclasses import dataclass, field
 
 import gradio as gr
 
+import tool_registry
 from chat_history import ChatHistory
 from foundry import FoundryManager
+from user_tools import load_tools
+
+load_tools()
+available_tools: list = tool_registry.get_tool_schemas()
 
 try:
     with open("models.txt", "r") as f:
@@ -23,6 +29,7 @@ class SessionContext:
     retain_loaded_models: bool = False
     pending_user_input: str = ""
     rebuild_history: bool = True  # Flag to indicate whether to rebuild the conversation history in the manager
+    new_request: bool = True  # Flag to indicate whether this is a new model request
 
 
 @dataclass
@@ -65,31 +72,117 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def get_model_response(history: list[dict], session: SessionContext, request: gr.Request):
+def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_results: list[dict] | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
     runtime = get_runtime(request)
     runtime.stop_event.clear()
 
-    user_input_object = {"role": "user", "content": session.pending_user_input}
+    assert request.session_hash is not None
 
-    history.append(user_input_object)
-    yield history
+    # Restore session settings if this function is being called for the first time in a new request. The manager may
+    #  override the user's tool_choice setting, so this restores the setting for each new request.
+    if session.new_request:
+        manager.restore_settings(request.session_hash)
+        session.new_request = False
+
+    user_input_object = None
+    if session.pending_user_input != "":
+        user_input_object = {"role": "user", "content": session.pending_user_input}
+        history.append(user_input_object)
+        session.pending_user_input = ""
+        yield history
 
     history.append({"role": "assistant", "content": ""})
+    print("Model response: ", end="", flush=True)
 
     if session.rebuild_history:
         history_to_pass = history
         session.rebuild_history = False
     else:
-        history_to_pass = [user_input_object]
-    
-    assert request.session_hash is not None
-    for chunk in manager.get_model_response(history_to_pass, request.session_hash):
+        if user_input_object is not None:
+            history_to_pass = [user_input_object]
+        else:
+            history_to_pass = []
+
+    tool_calls = []
+    last_message_was_tool_call = False
+    for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_results=tool_results):
         if runtime.stop_event.is_set():
             break
-        history[-1]["content"] += chunk
+        if chunk["type"] == "text":
+            # Check whether the last message in history is regular assistant text or a tool call. If it's a tool call, we need to create a new message for the regular assistant text.
+            if last_message_was_tool_call:
+                history.append({"role": "assistant", "content": chunk["content"]})
+            else:
+                history[-1]["content"] += chunk["content"]
+            print(chunk["content"], end="", flush=True)
+            last_message_was_tool_call = False
+        elif chunk["type"] == "tool_call_list":
+            tool_calls = chunk["content"]
+            history.append(gr.ChatMessage(
+                role="assistant",
+                content="\n".join(
+                    f"Called tool {function_name} with arguments {arguments_json} (call ID: {call_id})"
+                    for call_id, function_name, arguments_json in tool_calls
+                ),
+                metadata={"title": "Tool calls"}
+            ))
+            print(f"\nTool calls: {tool_calls}", end="", flush=True)
+            last_message_was_tool_call = True
         yield history
+
+    # If the model made tool calls, call the tools, create message items to pass to model and add to history, and get a new response from the model
+    new_tool_results = []
+    if len(tool_calls) > 0:
+        tool_functions = tool_registry.get_tool_functions()
+        for call_id, function_name, arguments_json in tool_calls:
+            if runtime.stop_event.is_set():
+                break
+            try:
+                arguments = json.loads(arguments_json)
+                if arguments is None:
+                    arguments = {}
+                if function_name in [json.loads(t)["name"] for t in enabled_tools] and function_name in tool_functions:
+                    print(f"\nCalling tool: {function_name} with arguments: {arguments}")
+                    try:
+                        new_tool_result_content = json.dumps(tool_functions[function_name](**arguments))
+                        print(f"Tool output: {new_tool_result_content}")
+                        result = {
+                            "role": "tool",
+                            "tool_call_id": call_id,
+                            "content": new_tool_result_content,
+                        }
+                        new_tool_results.append(result)
+                    except Exception as e:
+                        print(f"Error calling tool '{function_name}': {e}")
+                        result = {
+                            "role": "assistant",
+                            "tool_call_id": call_id,
+                            "content": f"Error calling tool '{function_name}': {e}"
+                        }
+                        new_tool_results.append(result)
+                else:
+                    print(f"Tool '{function_name}' not found.")
+                    result = {
+                        "role": "assistant",
+                        "tool_call_id": call_id,
+                        "content": f"Tool '{function_name}' not found."
+                    }
+                    new_tool_results.append(result)
+            except json.JSONDecodeError as e:
+                print(f"Error decoding arguments for tool '{function_name}': {e}")
+                result = {
+                    "role": "assistant",
+                    "tool_call_id": call_id,
+                    "content": f"Error decoding arguments for tool '{function_name}': {e}"
+                }
+                new_tool_results.append(result)
+            history.append(result)
+
+        # Get a new response from the model after the tool calls
+        if not runtime.stop_event.is_set():
+            yield from get_model_response(history, session, enabled_tools, request, tool_results=new_tool_results)  # AUTO overrides REQUIRED so it's not stuck in an infinite loop of tool calls
 
 def stop_generation(request: gr.Request):
     """Stop the model generation process."""
@@ -130,6 +223,46 @@ def load_previous_conversation(index: int, session: SessionContext, request: gr.
     manager.load_new_session(request.session_hash)
     session.rebuild_history = True
     return runtime.history_manager.load_previous_conversation(index)
+
+def toggle_tool_usage(tool_schema: dict, use_tool: bool):
+    """Toggle the usage of a tool in the model's response generation."""
+    if use_tool:
+        if tool_schema not in available_tools:
+            available_tools.append(tool_schema)
+    else:
+        available_tools.remove(tool_schema)
+
+def toggle_tool_support(request: gr.Request):
+    """Enable or disable the options for choosing tools based on whether the current model supports tool calling."""
+    assert request.session_hash is not None
+
+    active_model = manager.get_active_model(request.session_hash)
+    if active_model is None:
+        return gr.CheckboxGroup(interactive=False, value=None), gr.Radio(interactive=False)
+    
+    return (
+        gr.CheckboxGroup(
+            interactive = active_model.supports_tool_calling,
+            value = [] if active_model.supports_tool_calling else None
+        ),
+        gr.Radio(
+            interactive = active_model.supports_tool_calling
+        )
+    )
+
+def update_tool_choice(tool_choice: str, request: gr.Request):
+    """Update the tool choice setting for the current session."""
+    assert request.session_hash is not None
+    manager.update_tool_choice(request.session_hash, tool_choice)
+
+def update_available_tools(available_tools: list[str], request: gr.Request):
+    """Update the available tools for the current session."""
+    assert request.session_hash is not None
+    manager.update_available_tools(request.session_hash, [json.loads(tool) for tool in available_tools])
+
+def enable_new_request_flag(session: SessionContext):
+    """Set the new_request flag in the session context to True."""
+    session.new_request = True
 
 def main():
     with gr.Blocks(title="Foundry Local Chat") as full_interface:
@@ -172,13 +305,28 @@ def main():
             with gr.Column(scale=6):
                 chatbot = gr.Chatbot(
                     reasoning_tags=[("<think>", "</think>")],
-                )
+                    )
 
                 chat_input = gr.MultimodalTextbox(
                     interactive=True,
                     submit_btn=True,
                     stop_btn=True,
                     placeholder="Ask anything...",
+                )
+            with gr.Column(scale=1, min_width=100):
+                gr.Markdown("### Tools")
+
+                enabled_tools = gr.CheckboxGroup(
+                    label="Enabled Tools",
+                    choices=[(tool_schema["name"], json.dumps(tool_schema)) for tool_schema in tool_registry.get_tool_schemas()],
+                    interactive=True,
+                )
+
+                tool_choice = gr.Radio(
+                    label="Tool Choice",
+                    choices=["auto", "required", "none"],
+                    value="auto",
+                    interactive=True,
                 )
 
             model_select.change(
@@ -190,6 +338,11 @@ def main():
                 inputs=None,
                 outputs=[chat_input],
                 queue=False
+            ).then(
+                toggle_tool_support,
+                inputs=None,
+                outputs=[enabled_tools, tool_choice],
+                queue=False
             )
 
             submit_event = chat_input.submit(
@@ -198,8 +351,13 @@ def main():
                 outputs=[chat_input, session_state],
                 queue=True,
             ).then(
+                enable_new_request_flag,
+                inputs=[session_state],
+                outputs=None,
+                queue=True,
+            ).then(
                 get_model_response,
-                inputs=[chatbot, session_state],
+                inputs=[chatbot, session_state, enabled_tools],
                 outputs=[chatbot],
                 queue=True,
             ).then(
@@ -257,6 +415,20 @@ def main():
                 show_progress="hidden",
             )
 
+            tool_choice.change(
+                update_tool_choice,
+                inputs=[tool_choice],
+                outputs=None,
+                queue=True,
+            )
+
+            enabled_tools.change(
+                update_available_tools,
+                inputs=[enabled_tools],
+                outputs=None,
+                queue=True,
+            )
+
         full_interface.load(
             initialize_runtime,
             inputs=None,
@@ -267,6 +439,11 @@ def main():
             inputs=[model_select, session_state, retain_checkbox],
             outputs=[loaded_models_list],
             queue=True,
+        ).then(
+            toggle_tool_support,
+            inputs=None,
+            outputs=[enabled_tools, tool_choice],
+            queue=False
         ).then(
             update_conversation_history,
             inputs=None,
