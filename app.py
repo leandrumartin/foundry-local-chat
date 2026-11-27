@@ -129,7 +129,6 @@ def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: 
         session.pending_user_input = ""
         yield history
 
-    history.append({"role": "assistant", "content": ""})
     print("Model response: ", end="", flush=True)
 
     if session.rebuild_history:
