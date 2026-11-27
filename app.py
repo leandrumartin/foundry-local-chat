@@ -72,11 +72,12 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
-def add_chunk_to_history(history: list[gr.MessageDict | gr.ChatMessage], chunk, last_chunk_type: str|None) -> tuple[list[gr.MessageDict | gr.ChatMessage], str]:
+def add_chunk_to_history(history: list[gr.MessageDict | gr.ChatMessage], chunk, last_chunk_type: str|None) -> tuple[list, list[gr.MessageDict | gr.ChatMessage], str]:
     """Add a chunk of model output to the conversation history.
 
-    Returns a tuple containing the updated history and the type of the last chunk added.
+    Returns a tuple containing any tool calls, the updated history, and the type of the last chunk added.
     """
+    tool_calls = []
     if chunk["type"] == last_chunk_type:
         if type(history[-1]) == dict:
             history[-1]["content"] += chunk["content"]
@@ -106,7 +107,7 @@ def add_chunk_to_history(history: list[gr.MessageDict | gr.ChatMessage], chunk, 
             ))
             print(f"\nReasoning: {chunk["content"]}", end="", flush=True)
 
-    return history, chunk["type"]
+    return tool_calls, history, chunk["type"]
 
 def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_results: list[dict] | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
@@ -129,7 +130,6 @@ def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: 
         session.pending_user_input = ""
         yield history
 
-    history.append({"role": "assistant", "content": ""})
     print("Model response: ", end="", flush=True)
 
     if session.rebuild_history:
@@ -148,7 +148,7 @@ def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: 
             break
         if chunk["type"] == "tool_call_list":
             tool_calls.extend(chunk["content"])
-        history, last_chunk_type = add_chunk_to_history(history, chunk, last_chunk_type)
+        tool_calls, history, last_chunk_type = add_chunk_to_history(history, chunk, last_chunk_type)
         yield history
 
     # If the model made tool calls, call the tools, create message items to pass to model and add to history, and get a new response from the model
