@@ -146,6 +146,8 @@ def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: 
     for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_results=tool_results):
         if runtime.stop_event.is_set():
             break
+        if chunk["type"] == "tool_call_list":
+            tool_calls.extend(chunk["content"])
         history, last_chunk_type = add_chunk_to_history(history, chunk, last_chunk_type)
         yield history
 
