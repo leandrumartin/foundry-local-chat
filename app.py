@@ -72,6 +72,42 @@ def load_model(model_name: str, session: SessionContext, request: gr.Request, re
 
     return loaded_models_list
 
+def add_chunk_to_history(history: list[gr.MessageDict | gr.ChatMessage], chunk, last_chunk_type: str|None) -> tuple[list[gr.MessageDict | gr.ChatMessage], str]:
+    """Add a chunk of model output to the conversation history.
+
+    Returns a tuple containing the updated history and the type of the last chunk added.
+    """
+    if chunk["type"] == last_chunk_type:
+        if type(history[-1]) == dict:
+            history[-1]["content"] += chunk["content"]
+        elif type(history[-1]) == gr.ChatMessage:
+            history[-1].content += chunk["content"]
+        print(chunk["content"], end="", flush=True)
+    else:
+        if chunk["type"] == "text":
+            history.append({"role": "assistant", "content": chunk["content"]})
+            print(chunk["content"], end="", flush=True)
+        elif chunk["type"] == "tool_call_list":
+            tool_calls = chunk["content"]
+            history.append(gr.ChatMessage(
+                role="assistant",
+                content="\n".join(
+                    f"Called tool {function_name} with arguments {arguments_json} (call ID: {call_id})"
+                    for call_id, function_name, arguments_json in tool_calls
+                ),
+                metadata={"title": "Tool calls"}
+            ))
+            print(f"\nTool calls: {tool_calls}", end="", flush=True)
+        elif chunk["type"] == "reasoning":
+            history.append(gr.ChatMessage(
+                role="assistant",
+                content=chunk["content"],
+                metadata={"title": "Reasoning"}
+            ))
+            print(f"\nReasoning: {chunk["content"]}", end="", flush=True)
+
+    return history, chunk["type"]
+
 def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: SessionContext, enabled_tools: list[str], request: gr.Request, tool_results: list[dict] | None = None):
     """Get a response from the currently loaded model based on transformed user input and any conversation history that needs to be restored.
     """
@@ -93,7 +129,6 @@ def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: 
         session.pending_user_input = ""
         yield history
 
-    history.append({"role": "assistant", "content": ""})
     print("Model response: ", end="", flush=True)
 
     if session.rebuild_history:
@@ -106,30 +141,13 @@ def get_model_response(history: list[gr.MessageDict | gr.ChatMessage], session: 
             history_to_pass = []
 
     tool_calls = []
-    last_message_was_tool_call = False
+    last_chunk_type = None
     for chunk in manager.get_model_response(history_to_pass, request.session_hash, tool_results=tool_results):
         if runtime.stop_event.is_set():
             break
-        if chunk["type"] == "text":
-            # Check whether the last message in history is regular assistant text or a tool call. If it's a tool call, we need to create a new message for the regular assistant text.
-            if last_message_was_tool_call:
-                history.append({"role": "assistant", "content": chunk["content"]})
-            else:
-                history[-1]["content"] += chunk["content"]
-            print(chunk["content"], end="", flush=True)
-            last_message_was_tool_call = False
-        elif chunk["type"] == "tool_call_list":
-            tool_calls = chunk["content"]
-            history.append(gr.ChatMessage(
-                role="assistant",
-                content="\n".join(
-                    f"Called tool {function_name} with arguments {arguments_json} (call ID: {call_id})"
-                    for call_id, function_name, arguments_json in tool_calls
-                ),
-                metadata={"title": "Tool calls"}
-            ))
-            print(f"\nTool calls: {tool_calls}", end="", flush=True)
-            last_message_was_tool_call = True
+        if chunk["type"] == "tool_call_list":
+            tool_calls.extend(chunk["content"])
+        history, last_chunk_type = add_chunk_to_history(history, chunk, last_chunk_type)
         yield history
 
     # If the model made tool calls, call the tools, create message items to pass to model and add to history, and get a new response from the model

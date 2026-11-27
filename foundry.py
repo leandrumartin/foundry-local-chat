@@ -12,6 +12,7 @@ from foundry_local_sdk import (
     ToolCallItem,
     ToolChoice,
     ToolResultItem,
+    TextItemType,
 )
 from foundry_local_sdk.imodel import IModel
 
@@ -168,7 +169,10 @@ class FoundryManager:
             tool_calls = []
             for item in self._sessions[session_hash].process_streaming_request(request):
                 if isinstance(item, TextItem):
-                    yield {"type": "text", "content": item.text}
+                    if item.type == TextItemType.DEFAULT:
+                        yield {"type": "text", "content": item.text}
+                    elif item.type == TextItemType.REASONING:
+                        yield {"type": "reasoning", "content": item.text}
                 elif isinstance(item, ToolCallItem):
                     tool_calls.append((item.call_id, item.name, item.arguments))
 
